@@ -1,0 +1,14 @@
+# this configuration file has all empty custom components set up.
+# use 'esphome test.yaml compile' to build.
+
+external_components:
+  - source: components
+
+packages:
+  device: !include test-device.yml # include our test device setup
+
+alarm_control_panel:
+  platform: crow_runner
+  name: Main Alarm
+  codes:
+    - "1234"

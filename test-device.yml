@@ -1,0 +1,21 @@
+# this is just a simple test device setup that's used to compile and test the examples
+
+esphome:
+  name: external-components-test-device
+
+# esp32:
+#   board: esp32dev
+#   framework:
+#     type: esp-idf
+esp8266:
+  board: d1
+
+logger:
+
+wifi:
+  ssid: !secret home_wifi_ssid
+  password: !secret home_wifi_password
+
+web_server:
+  port: 80
+  version: 3
