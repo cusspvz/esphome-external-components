@@ -14,6 +14,11 @@ class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPane
         CrowRunnerAlarmControlPanel();
         void setup() override;
         void loop() override;
+        void dump_config() override;
+        uint32_t get_supported_features() const override;
+
+        bool get_requires_code() const override { return true; }
+        bool get_requires_code_to_arm() const override { return false; }
 
         /** add a code
         *
@@ -21,17 +26,11 @@ class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPane
         */
         void add_code(const std::string &code) { this->codes_.push_back(code); }
 
-        /** set requires a code to arm
-        *
-        * @param code_to_arm The requires code to arm
-        */
-        void set_requires_code_to_arm(bool code_to_arm) { this->requires_code_to_arm_ = code_to_arm; }
-
-
     protected:
-        bool requires_code_to_arm_ = false;
+        void control(const alarm_control_panel::AlarmControlPanelCall &call) override;
+        bool is_code_valid_(optional<std::string> code);
+        void arm_(optional<std::string> code, alarm_control_panel::AlarmControlPanelState state, uint32_t delay);
 
-        // a list of codes
         std::vector<std::string> codes_;
 };
 

@@ -9,6 +9,7 @@ packages:
 
 alarm_control_panel:
   platform: crow_runner
+  id: testando
   name: Main Alarm
   codes:
     - "1234"

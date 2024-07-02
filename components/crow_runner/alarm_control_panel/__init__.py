@@ -20,10 +20,6 @@ CrowRunnerAlarmControlPanel = crow_runner_ns.class_(
      alarm_control_panel.AlarmControlPanel, cg.Component
 )
 
-# Config keys
-CONF_CODES = "codes"
-CONF_REQUIRES_CODE_TO_ARM = "requires_code_to_arm"
-
 CROW_RUNNER_ALARM_CONTROL_PANEL_SCHEMA = (
     alarm_control_panel.ALARM_CONTROL_PANEL_SCHEMA.extend(
         {
@@ -34,10 +30,7 @@ CROW_RUNNER_ALARM_CONTROL_PANEL_SCHEMA = (
 )
 
 def validate_config(config):
-    if config.get(CONF_REQUIRES_CODE_TO_ARM, False) and not config.get(CONF_CODES, []):
-        raise cv.Invalid(
-            f"{CONF_REQUIRES_CODE_TO_ARM} cannot be True when there are no codes."
-        )
+
     return config
 
 # Export configuration schema
@@ -52,8 +45,6 @@ async def to_code(config):
     await cg.register_component(var, config)
     await alarm_control_panel.register_alarm_control_panel(var, config)
 
-    if CONF_CODES in config:
-        for acode in config[CONF_CODES]:
+    if "codes" in config:
+        for acode in config["codes"]:
             cg.add(var.add_code(acode))
-        if CONF_REQUIRES_CODE_TO_ARM in config:
-            cg.add(var.set_requires_code_to_arm(config[CONF_REQUIRES_CODE_TO_ARM]))
