@@ -11,7 +11,8 @@ namespace esphome {
 namespace crow_runner {
 
 struct CrowRunnerBusMessage {
-    std::vector<uint8_t> buffer;
+    public:
+        CrowRunnerBusMessage(std::vector<uint8_t> buffer);
 };
 
 enum class CrowRunnerBusState {
@@ -22,26 +23,32 @@ enum class CrowRunnerBusState {
 
 class CrowRunnerBus {
     public:
-    void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
-    static void IRAM_ATTR waiting_for_data_interrupt(CrowRunnerBus *arg);
-    static void IRAM_ATTR receiving_message_interrupt(CrowRunnerBus *arg);
-    static void IRAM_ATTR sending_message_interrupt(CrowRunnerBus *arg);
-    void sendMessage(CrowRunnerBusMessage *message);
-    void setState(CrowRunnerBusState state);
+        void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
+        static void IRAM_ATTR waiting_for_data_interrupt(CrowRunnerBus *arg);
+        static void IRAM_ATTR receiving_message_interrupt(CrowRunnerBus *arg);
+        static void IRAM_ATTR sending_message_interrupt(CrowRunnerBus *arg);
+        void send_message(CrowRunnerBusMessage *message);
+        void set_state(CrowRunnerBusState state);
+
+        void attach_receiver(void (*receiver)(CrowRunnerBusMessage* msg)) { this->receiver_ = receiver; }
+        void detach_receiver() { this->receiver_ = nullptr; }
 
     protected:
-    CrowRunnerBusState state_;
-    InternalGPIOPin *pin_clock_;
-    InternalGPIOPin *pin_data_;
-    ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
+        void process_received_message_();
 
-    // receiving vars
-    std::vector<uint8_t> receiving_buffer_;
-    uint8_t receiving_trailing_zeros_ = 0;
+        CrowRunnerBusState state_;
+        InternalGPIOPin *pin_clock_;
+        InternalGPIOPin *pin_data_;
+        ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
-    // sending vars
-    std::vector<std::vector<uint8_t>> sending_buffers_queue_;
-    uint8_t sending_bit_;
+        // receiving vars
+        std::vector<uint8_t> receiving_buffer_;
+        uint8_t receiving_trailing_zeros_ = 0;
+        void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
+
+        // sending vars
+        std::vector<std::vector<uint8_t>> sending_buffers_queue_;
+        uint8_t sending_bit_;
 };
 
 class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPanel, public Component {
