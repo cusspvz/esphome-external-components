@@ -265,7 +265,7 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
 
 void CrowRunnerBus::process_received_message_() {
     if (this->receiver_) {
-        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(this->receiving_buffer_);
+        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&this->receiving_buffer_);
 
         // send it to the message receiver
         this->receiver_(&new_message);
@@ -275,7 +275,7 @@ void CrowRunnerBus::process_received_message_() {
     this->receiving_buffer_.clear();
 }
 
-CrowRunnerBusMessage::CrowRunnerBusMessage(std::vector<uint8_t> buffer) {
+CrowRunnerBusMessage::CrowRunnerBusMessage(std::vector<uint8_t> *buffer) {
     // TODO: parse message
     // no-op
 }

@@ -12,7 +12,7 @@ namespace crow_runner {
 
 struct CrowRunnerBusMessage {
     public:
-        CrowRunnerBusMessage(std::vector<uint8_t> buffer);
+        CrowRunnerBusMessage(std::vector<uint8_t> *buffer);
 };
 
 enum class CrowRunnerBusState {
