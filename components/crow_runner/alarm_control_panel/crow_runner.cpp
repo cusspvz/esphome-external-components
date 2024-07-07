@@ -13,12 +13,20 @@ using namespace esphome::alarm_control_panel;
 
 static const char *TAG = "crow_runner.alarm_control_panel";
 
+
+///
+// CrowRunnerAlarmControlPanel
+///
+
 CrowRunnerAlarmControlPanel::CrowRunnerAlarmControlPanel() {
     // noop
 };
 
 void CrowRunnerAlarmControlPanel::setup() {
     ESP_LOGCONFIG(TAG, "Setting up Crow Runner AlarmControlPanel '%s'...", this->name_.c_str());
+
+    this->bus_.setup(this->pin_clock_, this->pin_data_);
+
     // switch (this->restore_mode_) {
     //   case ALARM_CONTROL_PANEL_ALWAYS_DISARMED:
     //     this->current_state_ = ACP_STATE_DISARMED;
@@ -36,9 +44,8 @@ void CrowRunnerAlarmControlPanel::setup() {
     // }
     // this->desired_state_ = this->current_state_;
 }
-
 void CrowRunnerAlarmControlPanel::loop() {
-
+    // noop
 }
 
 
@@ -47,6 +54,8 @@ void CrowRunnerAlarmControlPanel::dump_config() {
   ESP_LOGCONFIG(TAG, "  Current State: %s", LOG_STR_ARG(alarm_control_panel_state_to_string(this->current_state_)));
   ESP_LOGCONFIG(TAG, "  Number of Codes: %u", this->codes_.size());
 
+  LOG_PIN("  Clock Pin: ", this->pin_clock_);
+  LOG_PIN("  Data Pin: ", this->pin_data_);
 
   ESP_LOGCONFIG(TAG, "  Supported Features: %" PRIu32, this->get_supported_features());
 }
@@ -112,9 +121,147 @@ void CrowRunnerAlarmControlPanel::arm_(optional<std::string> code, AlarmControlP
 }
 
 
-// void CrowRunnerAlarmControlPanel::dump_config(){
-//     ESP_LOGCONFIG(TAG, "Empty SPI sensor");
+
+// void sendBinaryPacket(int decimalNumber) {
+//   byte binaryArray[binarySizeBytes + 4];  // 8 bits + leading/trailing bytes
+
+//   // Initialize the binary array
+//   memset(binaryArray, 0, sizeof(binaryArray));
+
+//   // Add leading bytes
+//   binaryArray[0] = 0b01111110;
+//   binaryArray[1] = 0b10000101;
+//   binaryArray[2] = 0b00000000;
+
+//   // Convert decimal to binary and reverse the bits
+//   for (int i = 0; i < 8; i++) {
+//     binaryArray[3] |= ((decimalNumber & 1) ? 1 : 0) << (7 - i);
+//     decimalNumber >>= 1;
+//   }
+
+//   // Add trailing byte
+//   binaryArray[4] = 0b01111110;  // Trailing byte
+
+//   // Send the constructed binary data
+//   sendPacket(binaryArray, binarySizeBytes + 4);
 // }
+
+///
+// CrowRunnerBus
+///
+
+void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data) {
+    pin_clock->setup();
+    pin_data->setup();
+
+    pin_clock->pin_mode(gpio::FLAG_INPUT);
+    pin_data->pin_mode(gpio::FLAG_INPUT);
+
+    // Save pins
+    this->pin_clock_ = pin_clock;
+    this->pin_data_ = pin_data;
+    this->pin_data_isr_ = pin_data->to_isr();
+
+    // Start in the WaitingForData state
+    this->setState(CrowRunnerBusState::WaitingForData);
+}
+
+void CrowRunnerBus::setState(CrowRunnerBusState state) {
+    // Logic to dissassemble the previous state
+    switch (state_) {
+        case CrowRunnerBusState::WaitingForData:
+            this->pin_data_->detach_interrupt();
+            break;
+        case CrowRunnerBusState::ReceivingMessage:
+            this->pin_clock_->detach_interrupt();
+            break;
+        case CrowRunnerBusState::SendingMessage:
+            this->pin_clock_->detach_interrupt();
+            this->pin_data_->pin_mode(gpio::FLAG_INPUT);
+            break;
+    }
+
+    // Set new state
+    state_ = state;
+
+    // Logic to setup the previous state
+    switch (state) {
+        case CrowRunnerBusState::WaitingForData:
+            this->pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+          break;
+        case CrowRunnerBusState::ReceivingMessage:
+            this->pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+          break;
+        case CrowRunnerBusState::SendingMessage:
+            this->pin_data_->pin_mode(gpio::FLAG_OUTPUT);
+            this->pin_clock_->attach_interrupt(CrowRunnerBus::sending_message_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+          break;
+    }
+}
+
+void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
+    // TODO: we might need to wipe the buffer and fill it with this first 0 bit
+
+    // Transition from WaitingForData to ReceivingMessage
+    arg->setState(CrowRunnerBusState::ReceivingMessage);
+}
+void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
+    // Read data pin state
+    bool data_bit = arg->pin_data_isr_.digital_read();
+    arg->receiving_buffer_.push_back(data_bit);
+
+    if (data_bit == 0) {
+        arg->receiving_trailing_zeros_++;
+    } else {
+        arg->receiving_trailing_zeros_ = 0;
+    }
+
+    if (arg->receiving_trailing_zeros_ > 8) {
+        // End of message detected
+        arg->receiving_buffer_.clear();
+        arg->setState(CrowRunnerBusState::WaitingForData);
+    }
+}
+
+void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
+    // Check if there's anything to send
+    if (arg->sending_buffers_queue_.empty()) {
+        // No messages to send, go back to waiting for data
+        arg->setState(CrowRunnerBusState::WaitingForData);
+        return;
+    }
+
+    // Get the current message to send
+    std::vector<uint8_t> &current_message = arg->sending_buffers_queue_.front();
+
+    // Calculate the current byte and bit position
+    size_t byte_pos = arg->sending_bit_ / 8;
+    size_t bit_pos = arg->sending_bit_ % 8;
+
+    // Send the current bit
+    bool bit_to_send = (current_message[byte_pos] >> bit_pos) & 0x01;
+    arg->pin_data_isr_.digital_write(bit_to_send);
+    Serial.print("Sending bit: ");
+    Serial.println(bit_to_send);
+
+    // Move to the next bit
+    arg->sending_bit_++;
+
+    // Check if the whole message has been sent
+    if (arg->sending_bit_ >= current_message.size() * 8) {
+        // Remove the sent message from the queue
+        arg->sending_buffers_queue_.erase(arg->sending_buffers_queue_.begin());
+        arg->sending_bit_ = 0;
+
+        Serial.println("Message sent. Remaining messages in queue: " + String(arg->sending_buffers_queue_.size()));
+
+        // If there are no more messages to send, go back to waiting for data
+        if (arg->sending_buffers_queue_.empty()) {
+            arg->setState(CrowRunnerBusState::WaitingForData);
+        }
+    }
+}
+
 
 }  // namespace empty_spi_sensor
 }  // namespace esphome

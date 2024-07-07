@@ -9,7 +9,8 @@ packages:
 
 alarm_control_panel:
   platform: crow_runner
-  id: testando
   name: Main Alarm
+  clock_pin: D4
+  data_pin: D5
   codes:
     - "1234"
