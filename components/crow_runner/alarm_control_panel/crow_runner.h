@@ -1,18 +1,34 @@
 #pragma once
-
+#include <bitset>
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/defines.h"
-
 #include "esphome/components/alarm_control_panel/alarm_control_panel.h"
 
 namespace esphome {
 namespace crow_runner {
 
+enum class CrowRunnerBusMessageType {
+    StatusChange,
+    ZoneReporting
+};
+
+struct CrowRunnerBusMessageReporting {
+    bool extra_zones;
+    bool zone_activated;
+    bool alarm_triggered;
+    std::bitset<8> active_zones;
+    std::bitset<8> alarm_trigger;
+};
+
 struct CrowRunnerBusMessage {
     public:
-        CrowRunnerBusMessage(std::vector<uint8_t> *buffer);
+        CrowRunnerBusMessage(std::bitset<72> *msg);
+
+    private:
+        CrowRunnerBusMessageType type;
+        CrowRunnerBusMessageReporting reporting;
 };
 
 enum class CrowRunnerBusState {
@@ -44,7 +60,8 @@ class CrowRunnerBus {
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         // receiving vars
-        std::vector<bool> receiving_buffer_;
+        std::bitset<72> receiving_message;
+        uint8_t receiving_message_head = 0;
         uint8_t consecutive_ones_ = 0;
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
 

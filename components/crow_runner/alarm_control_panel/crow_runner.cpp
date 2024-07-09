@@ -224,9 +224,11 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
     }
 
     data_bit = !data_bit; // invert data_bit
-    arg->receiving_buffer_.push_back(data_bit);
+    arg->receiving_message.set(arg->receiving_message_head, data_bit);
+    arg->receiving_message_head++;
+    // arg->receiving_buffer_.push_back(data_bit);
 
-    if (arg->receiving_buffer_.size() == 72) {
+    if (arg->receiving_message_head == 72) {
         // End of message detected
         arg->process_received_message_();
         arg->set_state(CrowRunnerBusState::WaitingForData);
@@ -268,52 +270,49 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
     }
 }
 
-std::vector<uint8_t> vector_bool_to_uint8(std::vector<bool> *bit_buffer) {
-    // Convert the vector of bools into bytes
-    std::vector<uint8_t> byte_buffer((bit_buffer->size() + 7) / 8, 0);
-
-    for (size_t i = 0; i < bit_buffer->size(); ++i) {
-        byte_buffer[i / 8] |= (bit_buffer->at(i) << (7 - (i % 8)));
-    }
-
-    return byte_buffer;
-}
-
-std::string vector_uint8_t_to_hex_string(std::vector<uint8_t> *byte_buffer) {
-    // Log the received message in hex
-    std::string hex_string;
-    for (size_t i = 0; i < byte_buffer->size(); ++i) {
-        char buf[3];  // two characters for the byte and one for the null terminator
-        snprintf(buf, sizeof(buf), "%02X", byte_buffer->at(i));
-        hex_string += buf;
-
-        // if (i < byte_buffer->size() - 1) {
-        //     hex_string += " ";  // separate bytes with a space
-        // }
-    }
-
-    return hex_string;
-}
-
 void CrowRunnerBus::process_received_message_() {
-    std::vector<uint8_t> buffer = vector_bool_to_uint8(&this->receiving_buffer_);
-
-    // clear bit buffer
-    this->receiving_buffer_.clear();
-
-    ESP_LOGD(TAG, "New message: %s", vector_uint8_t_to_hex_string(&buffer).c_str());
+    // Debugging
+    ESP_LOGD(TAG, "New message: %s", this->receiving_message.to_string());
 
     if (this->receiver_) {
-        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&buffer);
+        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&this->receiving_message);
 
         // send it to the message receiver
         this->receiver_(&new_message);
     }
+
+    // clear bit buffer
+    this->receiving_message.reset();
 }
 
-CrowRunnerBusMessage::CrowRunnerBusMessage(std::vector<uint8_t> *buffer) {
-    // TODO: parse message
-    // no-op
+CrowRunnerBusMessage::CrowRunnerBusMessage(std::bitset<72> *msg) {
+    // parse message
+    if (msg->test(63) == 0) {
+        this->type = CrowRunnerBusMessageType::ZoneReporting;
+        CrowRunnerBusMessageReporting reporting {};
+
+        reporting.extra_zones = msg->test(16);
+
+        // check active zones
+        for (unsigned int i = 0; i < 8; i++) {
+            reporting.active_zones[i] = msg->test(i + 24);
+
+            if (!reporting.zone_activated && reporting.active_zones[i] == 1){
+                reporting.zone_activated = 1;
+            }
+        }
+
+        // check alarm triggering zones
+        for (unsigned int i = 0; i < 8; i++) {
+            reporting.alarm_trigger[i] = msg->test(i + 32);
+
+            if (!reporting.alarm_triggered && reporting.alarm_trigger[i] == 1){
+                reporting.alarm_triggered = 1;
+            }
+        }
+
+        this->reporting = reporting;
+    }
 }
 
 }  // namespace empty_spi_sensor
