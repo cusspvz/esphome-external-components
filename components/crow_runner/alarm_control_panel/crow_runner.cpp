@@ -120,37 +120,13 @@ void CrowRunnerAlarmControlPanel::arm_(optional<std::string> code, AlarmControlP
   }
 }
 
-
-
-// void sendBinaryPacket(int decimalNumber) {
-//   byte binaryArray[binarySizeBytes + 4];  // 8 bits + leading/trailing bytes
-
-//   // Initialize the binary array
-//   memset(binaryArray, 0, sizeof(binaryArray));
-
-//   // Add leading bytes
-//   binaryArray[0] = 0b01111110;
-//   binaryArray[1] = 0b10000101;
-//   binaryArray[2] = 0b00000000;
-
-//   // Convert decimal to binary and reverse the bits
-//   for (int i = 0; i < 8; i++) {
-//     binaryArray[3] |= ((decimalNumber & 1) ? 1 : 0) << (7 - i);
-//     decimalNumber >>= 1;
-//   }
-
-//   // Add trailing byte
-//   binaryArray[4] = 0b01111110;  // Trailing byte
-
-//   // Send the constructed binary data
-//   sendPacket(binaryArray, binarySizeBytes + 4);
-// }
-
 ///
 // CrowRunnerBus
 ///
 
 void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data) {
+    ESP_LOGD(TAG, "Setting up CrowRunnerBus");
+
     pin_clock->setup();
     pin_data->setup();
 
@@ -166,9 +142,30 @@ void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data)
     this->set_state(CrowRunnerBusState::WaitingForData);
 }
 
+
+const char* CrowRunnerBusStateToString(CrowRunnerBusState state) {
+    switch (state) {
+        case CrowRunnerBusState::Idle:
+            return "Idle";
+        case CrowRunnerBusState::WaitingForData:
+            return "WaitingForData";
+        case CrowRunnerBusState::ReceivingMessage:
+            return "ReceivingMessage";
+        case CrowRunnerBusState::SendingMessage:
+            return "SendingMessage";
+        default:
+            return "Unknown";
+    }
+}
+
 void CrowRunnerBus::set_state(CrowRunnerBusState state) {
+    ESP_LOGD(TAG, "CrowRunnerBus state changed from %s to %s", CrowRunnerBusStateToString(this->state_), CrowRunnerBusStateToString(state));
+
     // Logic to dissassemble the previous state
     switch (state_) {
+        case CrowRunnerBusState::Idle:
+            // noop
+            break;
         case CrowRunnerBusState::WaitingForData:
             this->pin_data_->detach_interrupt();
             break;
@@ -179,13 +176,17 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             this->pin_clock_->detach_interrupt();
             this->pin_data_->pin_mode(gpio::FLAG_INPUT);
             break;
+
     }
 
     // Set new state
-    state_ = state;
+    this->state_ = state;
 
     // Logic to setup the previous state
     switch (state) {
+        case CrowRunnerBusState::Idle:
+            // noop
+            break;
         case CrowRunnerBusState::WaitingForData:
             this->pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
           break;
@@ -207,17 +208,25 @@ void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
 }
 
 void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
+
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
-    arg->receiving_buffer_.push_back(data_bit);
 
-    if (data_bit == 0) {
-        arg->receiving_trailing_zeros_++;
+    if (data_bit == 1) {
+        arg->consecutive_ones_++;
+
+        // don't let it increase too much
+        if (arg->consecutive_ones_++ > 128) {
+            arg->consecutive_ones_ = 128;
+        }
     } else {
-        arg->receiving_trailing_zeros_ = 0;
+        arg->consecutive_ones_ = 0;
     }
 
-    if (arg->receiving_trailing_zeros_ > 8) {
+    data_bit = !data_bit; // invert data_bit
+    arg->receiving_buffer_.push_back(data_bit);
+
+    if (arg->receiving_buffer_.size() == 72) {
         // End of message detected
         arg->process_received_message_();
         arg->set_state(CrowRunnerBusState::WaitingForData);
@@ -225,6 +234,8 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
 }
 
 void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
+    // ESP_LOGD(TAG, "Sending Message interrupt");
+
     // Check if there's anything to send
     if (arg->sending_buffers_queue_.empty()) {
         // No messages to send, go back to waiting for data
@@ -233,28 +244,22 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
     }
 
     // Get the current message to send
-    std::vector<uint8_t> &current_message = arg->sending_buffers_queue_.front();
-
-    // Calculate the current byte and bit position
-    size_t byte_pos = arg->sending_bit_ / 8;
-    size_t bit_pos = arg->sending_bit_ % 8;
+    std::vector<bool> &current_message = arg->sending_buffers_queue_.front();
 
     // Send the current bit
-    bool bit_to_send = (current_message[byte_pos] >> bit_pos) & 0x01;
+    bool bit_to_send = current_message.front();
     arg->pin_data_isr_.digital_write(bit_to_send);
-    Serial.print("Sending bit: ");
-    Serial.println(bit_to_send);
 
-    // Move to the next bit
-    arg->sending_bit_++;
+    // Remove the sent bit from the current message
+    current_message.erase(current_message.begin());
+
 
     // Check if the whole message has been sent
-    if (arg->sending_bit_ >= current_message.size() * 8) {
-        // Remove the sent message from the queue
+     if (current_message.empty()) {
+         // Remove the sent message from the queue
         arg->sending_buffers_queue_.erase(arg->sending_buffers_queue_.begin());
-        arg->sending_bit_ = 0;
 
-        Serial.println("Message sent. Remaining messages in queue: " + String(arg->sending_buffers_queue_.size()));
+        ESP_LOGD(TAG, "Message sent. Remaining messages in queue: %s", String(arg->sending_buffers_queue_.size()));
 
         // If there are no more messages to send, go back to waiting for data
         if (arg->sending_buffers_queue_.empty()) {
@@ -263,16 +268,47 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
     }
 }
 
+std::vector<uint8_t> vector_bool_to_uint8(std::vector<bool> *bit_buffer) {
+    // Convert the vector of bools into bytes
+    std::vector<uint8_t> byte_buffer((bit_buffer->size() + 7) / 8, 0);
+
+    for (size_t i = 0; i < bit_buffer->size(); ++i) {
+        byte_buffer[i / 8] |= (bit_buffer->at(i) << (7 - (i % 8)));
+    }
+
+    return byte_buffer;
+}
+
+std::string vector_uint8_t_to_hex_string(std::vector<uint8_t> *byte_buffer) {
+    // Log the received message in hex
+    std::string hex_string;
+    for (size_t i = 0; i < byte_buffer->size(); ++i) {
+        char buf[3];  // two characters for the byte and one for the null terminator
+        snprintf(buf, sizeof(buf), "%02X", byte_buffer->at(i));
+        hex_string += buf;
+
+        // if (i < byte_buffer->size() - 1) {
+        //     hex_string += " ";  // separate bytes with a space
+        // }
+    }
+
+    return hex_string;
+}
+
 void CrowRunnerBus::process_received_message_() {
+    std::vector<uint8_t> buffer = vector_bool_to_uint8(&this->receiving_buffer_);
+
+    // clear bit buffer
+    this->receiving_buffer_.clear();
+
+    ESP_LOGD(TAG, "New message: %s", vector_uint8_t_to_hex_string(&buffer).c_str());
+
     if (this->receiver_) {
-        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&this->receiving_buffer_);
+        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&buffer);
 
         // send it to the message receiver
         this->receiver_(&new_message);
     }
-
-    // clear buffer
-    this->receiving_buffer_.clear();
 }
 
 CrowRunnerBusMessage::CrowRunnerBusMessage(std::vector<uint8_t> *buffer) {

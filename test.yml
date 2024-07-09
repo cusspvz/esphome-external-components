@@ -10,7 +10,14 @@ packages:
 alarm_control_panel:
   platform: crow_runner
   name: Main Alarm
-  clock_pin: D4
-  data_pin: D5
+  data_pin: GPIO5 # D1
+  clock_pin: GPIO4 # D2
   codes:
     - "1234"
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: DEBUG

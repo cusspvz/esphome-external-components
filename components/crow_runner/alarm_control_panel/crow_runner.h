@@ -16,10 +16,12 @@ struct CrowRunnerBusMessage {
 };
 
 enum class CrowRunnerBusState {
+    Idle,
     WaitingForData,
     ReceivingMessage,
     SendingMessage
 };
+
 
 class CrowRunnerBus {
     public:
@@ -36,19 +38,18 @@ class CrowRunnerBus {
     protected:
         void process_received_message_();
 
-        CrowRunnerBusState state_;
+        CrowRunnerBusState state_ = CrowRunnerBusState::Idle;
         InternalGPIOPin *pin_clock_;
         InternalGPIOPin *pin_data_;
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         // receiving vars
-        std::vector<uint8_t> receiving_buffer_;
-        uint8_t receiving_trailing_zeros_ = 0;
+        std::vector<bool> receiving_buffer_;
+        uint8_t consecutive_ones_ = 0;
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
 
         // sending vars
-        std::vector<std::vector<uint8_t>> sending_buffers_queue_;
-        uint8_t sending_bit_;
+        std::vector<std::vector<bool>> sending_buffers_queue_;
 };
 
 class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPanel, public Component {
