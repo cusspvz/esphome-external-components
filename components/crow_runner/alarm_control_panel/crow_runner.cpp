@@ -208,7 +208,6 @@ void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
 }
 
 void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
-
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
 
@@ -216,7 +215,7 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
         arg->consecutive_ones_++;
 
         // don't let it increase too much
-        if (arg->consecutive_ones_++ > 128) {
+        if (arg->consecutive_ones_ > 128) {
             arg->consecutive_ones_ = 128;
         }
     } else {
@@ -226,7 +225,6 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
     data_bit = !data_bit; // invert data_bit
     arg->receiving_message.set(arg->receiving_message_head, data_bit);
     arg->receiving_message_head++;
-    // arg->receiving_buffer_.push_back(data_bit);
 
     if (arg->receiving_message_head == 72) {
         // End of message detected
@@ -272,7 +270,7 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
 
 void CrowRunnerBus::process_received_message_() {
     // Debugging
-    ESP_LOGD(TAG, "New message: %s", this->receiving_message.to_string());
+    ESP_LOGD(TAG, "New message: %s", this->receiving_message.to_string().c_str());
 
     if (this->receiver_) {
         CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&this->receiving_message);
