@@ -68,9 +68,7 @@ class CrowRunnerBus {
         // receiving vars
         std::deque<bool> receiving_buffer_;
         const int8_t receiving_buffer_max_size_ = 128;
-        uint8_t receiving_consecutive_ones_ = 0;
-        int8_t receiving_boundary_age_ = 0;
-        int8_t receiving_inside_state_ = 0;
+        uint8_t receiving_consecutive_ones_ = 128;
 
         // data message receiver
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;

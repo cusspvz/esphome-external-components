@@ -210,45 +210,51 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
 
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
+    arg->receiving_buffer_.push_back(data_bit);
 
-    // Handle consecurite_ones
-    if (data_bit == 1) {
-        arg->receiving_consecutive_ones_++;
+    // // Handle consecurite_ones
+    // if (data_bit == 1) {
+    //     arg->receiving_consecutive_ones_++;
 
-        // Don't allow consecurive ones to surpass 128
-        if (arg->receiving_consecutive_ones_ >= 128 && arg->receiving_inside_state_ == 0) {
-          arg->receiving_consecutive_ones_ = 128; //prevent from increasing too much
-        }
-    } else {
-        arg->receiving_consecutive_ones_ = 0;
+    //     // Don't allow consecurive ones to surpass 128
+    //     if (arg->receiving_consecutive_ones_ >= 128 && arg->receiving_inside_state_ == 0) {
+    //       arg->receiving_consecutive_ones_ = 128; //prevent from increasing too much
+    //     }
+    // } else {
+    //     arg->receiving_consecutive_ones_ = 0;
+    // }
+
+    // if (data_bit == 1) {
+    //     arg->receiving_buffer_.push_back(data_bit);
+    //     arg->receiving_boundary_age_++;
+    // } else {
+    //     if (arg->receiving_consecutive_ones_ == 6) {
+    //         boundary_found = true;
+    //     }
+
+    //     if (arg->receiving_consecutive_ones_ != 5) {
+    //         arg->receiving_boundary_age_++;
+    //         arg->receiving_buffer_.push_back(data_bit);
+    //     }
+    // }
+
+    // // Don'w allow buffer to surpass its maximum size
+    // if (arg->receiving_buffer_.size() > arg->receiving_buffer_max_size_) {
+    //   arg->receiving_buffer_.pop_front();
+    // }
+
+    // if (boundary_found) {
+    //     if (arg->receiving_boundary_age_ % 8 == 0) {
+    //         arg->process_received_message_();
+    //     }
+
+    //     arg->receiving_boundary_age_ = 0;
+    // }
+    //
+    if (arg->receiving_buffer_.size() == arg->receiving_buffer_max_size_) {
+        arg->process_received_message_();
     }
 
-    if (data_bit == 1) {
-        arg->receiving_buffer_.push_back(data_bit);
-        arg->receiving_boundary_age_++;
-    } else {
-        if (arg->receiving_consecutive_ones_ == 6) {
-            boundary_found = true;
-        }
-
-        if (arg->receiving_consecutive_ones_ != 5) {
-            arg->receiving_boundary_age_++;
-            arg->receiving_buffer_.push_back(data_bit);
-        }
-    }
-
-    // Don'w allow buffer to surpass its maximum size
-    if (arg->receiving_buffer_.size() > arg->receiving_buffer_max_size_) {
-      arg->receiving_buffer_.pop_front();
-    }
-
-    if (boundary_found) {
-        if (arg->receiving_boundary_age_ % 8 == 0) {
-            arg->process_received_message_();
-        }
-
-        arg->receiving_boundary_age_ = 0;
-    }
 }
 
 void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
@@ -287,26 +293,27 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
 }
 
 void CrowRunnerBus::process_received_message_() {
-    uint8_t message_size = this->receiving_boundary_age_ + this->boundary_length;
-    uint8_t start = this->receiving_buffer_.size() - message_size;
+    // uint8_t message_size = this->receiving_boundary_age_ + this->boundary_length;
+    // uint8_t start = this->receiving_buffer_.size() - message_size;
 
     // Create a bitset to store the extracted message
-    std::bitset<72> binary_message;
+    std::bitset<128> binary_message;
+    // std::bitset<72> binary_message;
 
     // Extract bits from the receiving buffer and store in the bitset
-    for (uint8_t i = 0; i < message_size; ++i) {
-        binary_message[i] = this->receiving_buffer_[start + i];
+    for (uint8_t i = 0; i < binary_message.size(); ++i) {
+        binary_message[i] = this->receiving_buffer_[i];
     }
 
     // Debugging
     ESP_LOGD(TAG, "New message: %s", binary_message.to_string().c_str());
 
-    if (this->receiver_) {
-        CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
+    // if (this->receiver_) {
+    //     CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
 
-        // send it to the message receiver
-        this->receiver_(&parsed_message);
-    }
+    //     // send it to the message receiver
+    //     this->receiver_(&parsed_message);
+    // }
 
     // clear bit buffer
     // this->receiving_buffer_.reset();
