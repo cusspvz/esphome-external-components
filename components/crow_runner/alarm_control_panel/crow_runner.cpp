@@ -281,6 +281,7 @@ void CrowRunnerBus::process_received_message_() {
 
     // clear bit buffer
     this->receiving_message.reset();
+    this->receiving_message_head = 0;
 }
 
 CrowRunnerBusMessage::CrowRunnerBusMessage(std::bitset<72> *msg) {
