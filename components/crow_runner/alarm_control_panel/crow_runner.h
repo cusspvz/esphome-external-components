@@ -1,5 +1,6 @@
 #pragma once
 #include <bitset>
+#include <deque>
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
@@ -56,6 +57,7 @@ class CrowRunnerBus {
         void detach_receiver() { this->receiver_ = nullptr; }
 
     protected:
+        const uint8_t boundary_length = 8;
         void process_received_message_();
 
         CrowRunnerBusState state_ = CrowRunnerBusState::Idle;
@@ -64,9 +66,13 @@ class CrowRunnerBus {
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         // receiving vars
-        std::bitset<72> receiving_message;
-        uint8_t receiving_message_head = 0;
-        uint8_t consecutive_ones_ = 0;
+        std::deque<bool> receiving_buffer_;
+        const int8_t receiving_buffer_max_size_ = 128;
+        uint8_t receiving_consecutive_ones_ = 0;
+        int8_t receiving_boundary_age_ = 0;
+        int8_t receiving_inside_state_ = 0;
+
+        // data message receiver
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
 
         // sending vars

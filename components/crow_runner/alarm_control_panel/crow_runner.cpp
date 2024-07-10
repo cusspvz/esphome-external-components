@@ -201,39 +201,53 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
 }
 
 void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
-    // TODO: we might need to wipe the buffer and fill it with this first 0 bit
-    // Read data pin state
-    bool data_bit = arg->pin_data_isr_.digital_read();
-    arg->receiving_message.set(0, data_bit);
-    arg->receiving_message_head=1;
-
     // Transition from WaitingForData to ReceivingMessage
     arg->set_state(CrowRunnerBusState::ReceivingMessage);
 }
 
 void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
+    bool boundary_found = false;
+
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
 
+    // Handle consecurite_ones
     if (data_bit == 1) {
-        arg->consecutive_ones_++;
+        arg->receiving_consecutive_ones_++;
 
-        // don't let it increase too much
-        if (arg->consecutive_ones_ > 128) {
-            arg->consecutive_ones_ = 128;
+        // Don't allow consecurive ones to surpass 128
+        if (arg->receiving_consecutive_ones_ >= 128 && arg->receiving_inside_state_ == 0) {
+          arg->receiving_consecutive_ones_ = 128; //prevent from increasing too much
         }
     } else {
-        arg->consecutive_ones_ = 0;
+        arg->receiving_consecutive_ones_ = 0;
     }
 
-    // data_bit = !data_bit; // invert data_bit
-    arg->receiving_message.set(arg->receiving_message_head, data_bit);
-    arg->receiving_message_head++;
+    if (data_bit == 1) {
+        arg->receiving_buffer_.push_back(data_bit);
+        arg->receiving_boundary_age_++;
+    } else {
+        if (arg->receiving_consecutive_ones_ == 6) {
+            boundary_found = true;
+        }
 
-    if (arg->receiving_message_head == 72) {
-        // End of message detected
-        arg->process_received_message_();
-        arg->set_state(CrowRunnerBusState::WaitingForData);
+        if (arg->receiving_consecutive_ones_ != 5) {
+            arg->receiving_boundary_age_++;
+            arg->receiving_buffer_.push_back(data_bit);
+        }
+    }
+
+    // Don'w allow buffer to surpass its maximum size
+    if (arg->receiving_buffer_.size() > arg->receiving_buffer_max_size_) {
+      arg->receiving_buffer_.pop_front();
+    }
+
+    if (boundary_found) {
+        if (arg->receiving_boundary_age_ % 8 == 0) {
+            arg->process_received_message_();
+        }
+
+        arg->receiving_boundary_age_ = 0;
     }
 }
 
@@ -273,19 +287,29 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
 }
 
 void CrowRunnerBus::process_received_message_() {
+    uint8_t message_size = this->receiving_boundary_age_ + this->boundary_length;
+    uint8_t start = this->receiving_buffer_.size() - message_size;
+
+    // Create a bitset to store the extracted message
+    std::bitset<72> binary_message;
+
+    // Extract bits from the receiving buffer and store in the bitset
+    for (uint8_t i = 0; i < message_size; ++i) {
+        binary_message[i] = this->receiving_buffer_[start + i];
+    }
+
     // Debugging
-    ESP_LOGD(TAG, "New message: %s", this->receiving_message.to_string().c_str());
+    ESP_LOGD(TAG, "New message: %s", binary_message.to_string().c_str());
 
     if (this->receiver_) {
-        CrowRunnerBusMessage new_message = CrowRunnerBusMessage(&this->receiving_message);
+        CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
 
         // send it to the message receiver
-        this->receiver_(&new_message);
+        this->receiver_(&parsed_message);
     }
 
     // clear bit buffer
-    this->receiving_message.reset();
-    this->receiving_message_head = 0;
+    // this->receiving_buffer_.reset();
 }
 
 CrowRunnerBusMessage::CrowRunnerBusMessage(std::bitset<72> *msg) {
