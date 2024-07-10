@@ -202,6 +202,10 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
 
 void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
     // TODO: we might need to wipe the buffer and fill it with this first 0 bit
+    // Read data pin state
+    bool data_bit = arg->pin_data_isr_.digital_read();
+    arg->receiving_message.set(0, data_bit);
+    this->receiving_message_head=1;
 
     // Transition from WaitingForData to ReceivingMessage
     arg->set_state(CrowRunnerBusState::ReceivingMessage);

@@ -10,6 +10,7 @@ namespace esphome {
 namespace crow_runner {
 
 enum class CrowRunnerBusMessageType {
+    Unknown,
     StatusChange,
     ZoneReporting
 };
@@ -26,8 +27,11 @@ struct CrowRunnerBusMessage {
     public:
         CrowRunnerBusMessage(std::bitset<72> *msg);
 
+        CrowRunnerBusMessageType getType() const { return type; }
+        CrowRunnerBusMessageReporting getReporting() const { return reporting; }
+
     private:
-        CrowRunnerBusMessageType type;
+    CrowRunnerBusMessageType type = CrowRunnerBusMessageType::Unknown;
         CrowRunnerBusMessageReporting reporting;
 };
 
