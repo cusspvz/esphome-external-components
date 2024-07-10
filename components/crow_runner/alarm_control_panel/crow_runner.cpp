@@ -222,7 +222,7 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
         arg->consecutive_ones_ = 0;
     }
 
-    data_bit = !data_bit; // invert data_bit
+    // data_bit = !data_bit; // invert data_bit
     arg->receiving_message.set(arg->receiving_message_head, data_bit);
     arg->receiving_message_head++;
 
