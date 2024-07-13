@@ -1,4 +1,5 @@
 #pragma once
+#include <_types/_uint8_t.h>
 #include <bitset>
 #include <deque>
 #include "esphome/core/automation.h"
@@ -6,6 +7,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/defines.h"
 #include "esphome/components/alarm_control_panel/alarm_control_panel.h"
+#include "bit_vector.h"
 
 namespace esphome {
 namespace crow_runner {
@@ -44,6 +46,14 @@ enum class CrowRunnerBusState {
 };
 
 
+// Based on my reverse engineering, I've confirmed the following information:
+// - All the messages have the boundary of 0b10000001 before and after the actual message
+// - The message length can vary
+// - Some messages are emitted by the alarm, others from the keypad - I don't know yet how to distinguish both
+//
+const uint8_t BOUNDARY = 0b10000001;
+const uint8_t BOUNDARY_SIZE = 8;
+
 class CrowRunnerBus {
     public:
         void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
@@ -58,7 +68,6 @@ class CrowRunnerBus {
 
     protected:
         const uint8_t boundary_length = 8;
-        void process_received_message_();
 
         CrowRunnerBusState state_ = CrowRunnerBusState::Idle;
         InternalGPIOPin *pin_clock_;
@@ -66,9 +75,8 @@ class CrowRunnerBus {
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         // receiving vars
-        std::deque<bool> receiving_buffer_;
-        const int8_t receiving_buffer_max_size_ = 128;
-        uint8_t receiving_consecutive_ones_ = 128;
+        BitVector receiving_buffer_ = BitVector(128 + BOUNDARY_SIZE * 2);
+        uint8_t receiving_head_ = 0;
 
         // data message receiver
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
