@@ -17,6 +17,17 @@ using namespace esphome::alarm_control_panel;
 static const char *TAG = "crow_runner.alarm_control_panel";
 
 
+std::string vector_to_hex_string(const std::vector<uint8_t>& data) {
+    std::ostringstream oss;
+    for (const auto& byte : data) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte) << ' ';
+    }
+    std::string hexString = oss.str();
+    hexString.pop_back(); // Remove the trailing space
+    return hexString;
+}
+
+
 ///
 // CrowRunnerAlarmControlPanel
 ///
@@ -243,16 +254,6 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
     }
 }
 
-
-std::string vector_to_hex_string(const std::vector<uint8_t>& data) {
-    std::ostringstream oss;
-    for (const auto& byte : data) {
-        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte) << ' ';
-    }
-    std::string hexString = oss.str();
-    hexString.pop_back(); // Remove the trailing space
-    return hexString;
-}
 
 void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
     size_t first_byte = 0;
