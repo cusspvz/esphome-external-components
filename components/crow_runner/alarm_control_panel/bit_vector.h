@@ -53,13 +53,13 @@ public:
         size_t start_offset = start_bit % 8;
         size_t end_offset = end_bit % 8;
 
-        // if (start_offset == 0) {
+        if (start_offset == 0) {
             std::copy(data.begin() + start_byte, data.begin() + end_byte, newBitVector.data.begin());
-        // } else {
-        //     for (size_t i = start_bit; i < end_bit; ++i) {
-        //         newBitVector.set(i - start_bit, this->get(i));
-        //     }
-        // }
+        } else {
+            for (size_t i = start_bit; i < end_bit; ++i) {
+                newBitVector.set_bit(i - start_bit, this->get_bit(i));
+            }
+        }
 
         // // Handle the case where the end bit does not align with the byte boundary
         // if (end_offset != 0) {

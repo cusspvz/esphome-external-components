@@ -221,6 +221,10 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
     // Check if we're out of bounderies
     if (!arg->receiving_buffer_.is_writeable()) {
         ESP_LOGD(TAG, "No valid message has been found...");
+
+        // Debugging
+        ESP_LOGD(TAG, "Debugging buffer data: %s", vector_to_hex_string(arg->receiving_buffer_.get_data()).c_str());
+
         arg->set_state(CrowRunnerBusState::WaitingForData);
         return;
     }
@@ -259,7 +263,7 @@ void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
         receiving_buffer_.get_byte(0) != BOUNDARY ||
         receiving_buffer_.get_byte(last_byte) != BOUNDARY
     ) {
-        ESP_LOGD(TAG, "Begin and end are NOT boundaries...");
+        // ESP_LOGD(TAG, "Begin and end are NOT boundaries...");
         return;
     }
 
