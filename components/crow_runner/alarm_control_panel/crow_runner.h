@@ -1,5 +1,4 @@
 #pragma once
-#include <_types/_uint8_t.h>
 #include <bitset>
 #include <deque>
 #include "esphome/core/automation.h"
@@ -52,7 +51,7 @@ enum class CrowRunnerBusState {
 // - Some messages are emitted by the alarm, others from the keypad - I don't know yet how to distinguish both
 //
 const uint8_t BOUNDARY = 0b10000001;
-const uint8_t BOUNDARY_SIZE = 8;
+const uint8_t BOUNDARY_SIZE_IN_BITS = 8;
 
 class CrowRunnerBus {
     public:
@@ -67,6 +66,7 @@ class CrowRunnerBus {
         void detach_receiver() { this->receiver_ = nullptr; }
 
     protected:
+
         const uint8_t boundary_length = 8;
 
         CrowRunnerBusState state_ = CrowRunnerBusState::Idle;
@@ -75,8 +75,8 @@ class CrowRunnerBus {
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         // receiving vars
-        BitVector receiving_buffer_ = BitVector(128 + BOUNDARY_SIZE * 2);
-        uint8_t receiving_head_ = 0;
+        BitVector receiving_buffer_ = BitVector(128 + (BOUNDARY_SIZE_IN_BITS * 2));
+        void find_valid_messages_within_receiving_buffer_();
 
         // data message receiver
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;

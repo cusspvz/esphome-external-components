@@ -1,5 +1,8 @@
 #include "crow_runner.h"
 #include <utility>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 #include "esphome/components/alarm_control_panel/alarm_control_panel.h"
 #include "esphome/core/application.h"
 #include "esphome/core/helpers.h"
@@ -23,26 +26,26 @@ CrowRunnerAlarmControlPanel::CrowRunnerAlarmControlPanel() {
 };
 
 void CrowRunnerAlarmControlPanel::setup() {
-    ESP_LOGCONFIG(TAG, "Setting up Crow Runner AlarmControlPanel '%s'...", this->name_.c_str());
+    ESP_LOGCONFIG(TAG, "Setting up Crow Runner AlarmControlPanel '%s'...", name_.c_str());
 
-    this->bus_.setup(this->pin_clock_, this->pin_data_);
+    bus_.setup(pin_clock_, pin_data_);
 
-    // switch (this->restore_mode_) {
+    // switch (restore_mode_) {
     //   case ALARM_CONTROL_PANEL_ALWAYS_DISARMED:
-    //     this->current_state_ = ACP_STATE_DISARMED;
+    //     current_state_ = ACP_STATE_DISARMED;
     //     break;
     //   case ALARM_CONTROL_PANEL_RESTORE_DEFAULT_DISARMED: {
     //     uint8_t value;
-    //     this->pref_ = global_preferences->make_preference<uint8_t>(this->get_object_id_hash());
-    //     if (this->pref_.load(&value)) {
-    //       this->current_state_ = static_cast<AlarmControlPanelState>(value);
+    //     pref_ = global_preferences->make_preference<uint8_t>(get_object_id_hash());
+    //     if (pref_.load(&value)) {
+    //       current_state_ = static_cast<AlarmControlPanelState>(value);
     //     } else {
-    //       this->current_state_ = ACP_STATE_DISARMED;
+    //       current_state_ = ACP_STATE_DISARMED;
     //     }
     //     break;
     //   }
     // }
-    // this->desired_state_ = this->current_state_;
+    // desired_state_ = current_state_;
 }
 void CrowRunnerAlarmControlPanel::loop() {
     // noop
@@ -51,13 +54,13 @@ void CrowRunnerAlarmControlPanel::loop() {
 
 void CrowRunnerAlarmControlPanel::dump_config() {
   ESP_LOGCONFIG(TAG, "CrowRunnerAlarmControlPanel:");
-  ESP_LOGCONFIG(TAG, "  Current State: %s", LOG_STR_ARG(alarm_control_panel_state_to_string(this->current_state_)));
-  ESP_LOGCONFIG(TAG, "  Number of Codes: %u", this->codes_.size());
+  ESP_LOGCONFIG(TAG, "  Current State: %s", LOG_STR_ARG(alarm_control_panel_state_to_string(current_state_)));
+  ESP_LOGCONFIG(TAG, "  Number of Codes: %u", codes_.size());
 
-  LOG_PIN("  Clock Pin: ", this->pin_clock_);
-  LOG_PIN("  Data Pin: ", this->pin_data_);
+  LOG_PIN("  Clock Pin: ", pin_clock_);
+  LOG_PIN("  Data Pin: ", pin_data_);
 
-  ESP_LOGCONFIG(TAG, "  Supported Features: %" PRIu32, this->get_supported_features());
+  ESP_LOGCONFIG(TAG, "  Supported Features: %" PRIu32, get_supported_features());
 }
 
 
@@ -67,10 +70,10 @@ uint32_t CrowRunnerAlarmControlPanel::get_supported_features() const {
 
 
 bool CrowRunnerAlarmControlPanel::is_code_valid_(optional<std::string> code) {
-  if (!this->codes_.empty()) {
+  if (!codes_.empty()) {
     if (code.has_value()) {
       ESP_LOGVV(TAG, "Checking code: %s", code.value().c_str());
-      return (std::count(this->codes_.begin(), this->codes_.end(), code.value()) == 1);
+      return (std::count(codes_.begin(), codes_.end(), code.value()) == 1);
     }
     ESP_LOGD(TAG, "No code provided");
     return false;
@@ -82,18 +85,18 @@ bool CrowRunnerAlarmControlPanel::is_code_valid_(optional<std::string> code) {
 void CrowRunnerAlarmControlPanel::control(const AlarmControlPanelCall &call) {
   if (call.get_state()) {
     if (call.get_state() == ACP_STATE_ARMED_AWAY) {
-      this->arm_(call.get_code(), ACP_STATE_ARMED_AWAY, 0);
+      arm_(call.get_code(), ACP_STATE_ARMED_AWAY, 0);
     } else if (call.get_state() == ACP_STATE_DISARMED) {
-      if (!this->is_code_valid_(call.get_code())) {
+      if (!is_code_valid_(call.get_code())) {
         ESP_LOGW(TAG, "Not disarming code doesn't match");
         return;
       }
-      this->desired_state_ = ACP_STATE_DISARMED;
-      this->publish_state(ACP_STATE_DISARMED);
+      desired_state_ = ACP_STATE_DISARMED;
+      publish_state(ACP_STATE_DISARMED);
     } else if (call.get_state() == ACP_STATE_TRIGGERED) {
-      this->publish_state(ACP_STATE_TRIGGERED);
+      publish_state(ACP_STATE_TRIGGERED);
     } else if (call.get_state() == ACP_STATE_PENDING) {
-      this->publish_state(ACP_STATE_PENDING);
+      publish_state(ACP_STATE_PENDING);
     } else {
       ESP_LOGE(TAG, "State not yet implemented: %s",
                LOG_STR_ARG(alarm_control_panel_state_to_string(*call.get_state())));
@@ -104,19 +107,19 @@ void CrowRunnerAlarmControlPanel::control(const AlarmControlPanelCall &call) {
 
 void CrowRunnerAlarmControlPanel::arm_(optional<std::string> code, AlarmControlPanelState state,
                                      uint32_t delay) {
-  if (this->current_state_ != ACP_STATE_DISARMED) {
+  if (current_state_ != ACP_STATE_DISARMED) {
     ESP_LOGW(TAG, "Cannot arm when not disarmed");
     return;
   }
-  if (!this->is_code_valid_(std::move(code))) {
+  if (!is_code_valid_(std::move(code))) {
     ESP_LOGW(TAG, "Not arming code doesn't match");
     return;
   }
-  this->desired_state_ = state;
+  desired_state_ = state;
   if (delay > 0) {
-    this->publish_state(ACP_STATE_ARMING);
+    publish_state(ACP_STATE_ARMING);
   } else {
-    this->publish_state(state);
+    publish_state(state);
   }
 }
 
@@ -134,12 +137,12 @@ void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data)
     pin_data->pin_mode(gpio::FLAG_INPUT);
 
     // Save pins
-    this->pin_clock_ = pin_clock;
-    this->pin_data_ = pin_data;
-    this->pin_data_isr_ = pin_data->to_isr();
+    pin_clock_ = pin_clock;
+    pin_data_ = pin_data;
+    pin_data_isr_ = pin_data->to_isr();
 
     // Start in the WaitingForData state
-    this->set_state(CrowRunnerBusState::WaitingForData);
+    set_state(CrowRunnerBusState::WaitingForData);
 }
 
 
@@ -159,7 +162,7 @@ const char* CrowRunnerBusStateToString(CrowRunnerBusState state) {
 }
 
 void CrowRunnerBus::set_state(CrowRunnerBusState state) {
-    ESP_LOGD(TAG, "CrowRunnerBus state changed from %s to %s", CrowRunnerBusStateToString(this->state_), CrowRunnerBusStateToString(state));
+    ESP_LOGD(TAG, "CrowRunnerBus state changed from %s to %s", CrowRunnerBusStateToString(state_), CrowRunnerBusStateToString(state));
 
     // Logic to dissassemble the previous state
     switch (state_) {
@@ -167,24 +170,23 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             // noop
             break;
         case CrowRunnerBusState::WaitingForData:
-            this->pin_data_->detach_interrupt();
+            pin_data_->detach_interrupt();
             break;
         case CrowRunnerBusState::ReceivingMessage:
-            this->pin_clock_->detach_interrupt();
+            pin_clock_->detach_interrupt();
 
             // clear receiving buffer
-            arg->receiving_buffer_.clear();
-            arg->receiving_head_ = 0;
+            receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::SendingMessage:
-            this->pin_clock_->detach_interrupt();
-            this->pin_data_->pin_mode(gpio::FLAG_INPUT);
+            pin_clock_->detach_interrupt();
+            pin_data_->pin_mode(gpio::FLAG_INPUT);
             break;
 
     }
 
     // Set new state
-    this->state_ = state;
+    state_ = state;
 
     // Logic to setup the previous state
     switch (state) {
@@ -192,14 +194,14 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             // noop
             break;
         case CrowRunnerBusState::WaitingForData:
-            this->pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+            pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
           break;
         case CrowRunnerBusState::ReceivingMessage:
-            this->pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+            pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
           break;
         case CrowRunnerBusState::SendingMessage:
-            this->pin_data_->pin_mode(gpio::FLAG_OUTPUT);
-            this->pin_clock_->attach_interrupt(CrowRunnerBus::sending_message_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+            pin_data_->pin_mode(gpio::FLAG_OUTPUT);
+            pin_clock_->attach_interrupt(CrowRunnerBus::sending_message_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
           break;
     }
 }
@@ -214,11 +216,10 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
 
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
-    arg->receiving_buffer_.push_back(data_bit);
-
+    arg->receiving_buffer_.write_bit(data_bit);
 
     // Check if we're out of bounderies
-    if (arg->receiving_head_ == arg->receiving_buffer_.size()) {
+    if (!arg->receiving_buffer_.is_writeable()) {
         ESP_LOGD(TAG, "No valid message has been found...");
         arg->set_state(CrowRunnerBusState::WaitingForData);
         return;
@@ -227,45 +228,65 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
     //
     // Check if theres a valid message
     //
-    int buffer_size = arg->receiving_buffer_.size()
+    size_t written_bits = arg->receiving_buffer_.written_bits_so_far();
     if (
         // the message has the set of bytes complete
-        buffer_size % 8 == 0
+        written_bits % 8 == 0
         // and
-        && buffer_size > (BOUNDARY_SIZE * 2)
+        && written_bits > (BOUNDARY_SIZE_IN_BITS * 2)
     ) {
-        //
-        // Process message
-        //
-
-        // Create a point that represents the vector of bools as a vector of uint8_t
-
-        // uint8_t message_size = this->receiving_boundary_age_ + this->boundary_length;
-        // uint8_t start = this->receiving_buffer_.size() - message_size;
-
-        // // Create a bitset to store the extracted message
-        // std::bitset<128> binary_message;
-        // // std::bitset<72> binary_message;
-
-        // // Extract bits from the receiving buffer and store in the bitset
-        // for (uint8_t i = 0; i < binary_message.size(); ++i) {
-        //     binary_message[i] = this->receiving_buffer_[i];
-        // }
-
-        // Debugging
-        // ESP_LOGD(TAG, "New message: %s", binary_message.to_string().c_str());
-
-        // if (this->receiver_) {
-        //     CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
-
-        //     // send it to the message receiver
-        //     this->receiver_(&parsed_message);
-        // }
-
-        // clear bit buffer
-        // this->receiving_buffer_.reset();
-        // we should be able to assess if there's an underlying message
+       arg->find_valid_messages_within_receiving_buffer_();
     }
+}
+
+
+std::string vector_to_hex_string(const std::vector<uint8_t>& data) {
+    std::ostringstream oss;
+    for (const auto& byte : data) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte) << ' ';
+    }
+    std::string hexString = oss.str();
+    hexString.pop_back(); // Remove the trailing space
+    return hexString;
+}
+
+void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
+    size_t first_byte = 0;
+    size_t last_byte = receiving_buffer_.written_bytes_so_far() ;
+
+    // check if the beginning and end are actually boundaries
+    if (
+        receiving_buffer_.get_byte(0) != BOUNDARY ||
+        receiving_buffer_.get_byte(last_byte) != BOUNDARY
+    ) {
+        ESP_LOGD(TAG, "Begin and end are NOT boundaries...");
+        return;
+    }
+
+    //
+    // Process message
+    //
+    //
+
+    // adjust so we can extract the message WITHOUT the boundaries
+    first_byte+=1;
+    last_byte-=1;
+
+    BitVector binary_message = receiving_buffer_.clone(first_byte*8, last_byte*8);
+
+    // Debugging
+    ESP_LOGD(TAG, "New message: %s", vector_to_hex_string(binary_message.get_data()).c_str());
+
+    // if (receiver_) {
+    //     CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
+
+    //     // send it to the message receiver
+    //     receiver_(&parsed_message);
+    // }
+
+    // clear bit buffer
+    // receiving_buffer_.reset();
+    // we should be able to assess if there's an underlying message
 }
 
 void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
@@ -306,7 +327,7 @@ void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
 CrowRunnerBusMessage::CrowRunnerBusMessage(std::bitset<72> *msg) {
     // parse message
     if (msg->test(63) == 0) {
-        this->type = CrowRunnerBusMessageType::ZoneReporting;
+        type = CrowRunnerBusMessageType::ZoneReporting;
         CrowRunnerBusMessageReporting reporting {};
 
         reporting.extra_zones = msg->test(16);
@@ -329,7 +350,7 @@ CrowRunnerBusMessage::CrowRunnerBusMessage(std::bitset<72> *msg) {
             }
         }
 
-        this->reporting = reporting;
+        reporting = reporting;
     }
 }
 
