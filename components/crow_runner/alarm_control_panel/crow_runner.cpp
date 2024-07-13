@@ -16,7 +16,6 @@ using namespace esphome::alarm_control_panel;
 
 static const char *TAG = "crow_runner.alarm_control_panel";
 
-
 std::string vector_to_hex_string(const std::vector<uint8_t>& data) {
     std::ostringstream oss;
     for (const auto& byte : data) {
@@ -26,7 +25,6 @@ std::string vector_to_hex_string(const std::vector<uint8_t>& data) {
     hexString.pop_back(); // Remove the trailing space
     return hexString;
 }
-
 
 ///
 // CrowRunnerAlarmControlPanel
@@ -154,6 +152,9 @@ void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data)
 
     // Start in the WaitingForData state
     set_state(CrowRunnerBusState::WaitingForData);
+
+    // debugging
+    pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
 }
 
 
@@ -184,14 +185,14 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             pin_data_->detach_interrupt();
             break;
         case CrowRunnerBusState::ReceivingMessage:
-            pin_clock_->detach_interrupt();
+            // pin_clock_->detach_interrupt();
 
             // clear receiving buffer
             receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::SendingMessage:
-            pin_clock_->detach_interrupt();
-            pin_data_->pin_mode(gpio::FLAG_INPUT);
+            // pin_clock_->detach_interrupt();
+            // pin_data_->pin_mode(gpio::FLAG_INPUT);
             break;
 
     }
@@ -208,11 +209,11 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
           break;
         case CrowRunnerBusState::ReceivingMessage:
-            pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+            // pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
           break;
         case CrowRunnerBusState::SendingMessage:
-            pin_data_->pin_mode(gpio::FLAG_OUTPUT);
-            pin_clock_->attach_interrupt(CrowRunnerBus::sending_message_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+            // pin_data_->pin_mode(gpio::FLAG_OUTPUT);
+            // pin_clock_->attach_interrupt(CrowRunnerBus::sending_message_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
           break;
     }
 }
@@ -223,7 +224,9 @@ void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
 }
 
 void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
-    bool boundary_found = false;
+    if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
+        return;
+    }
 
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
