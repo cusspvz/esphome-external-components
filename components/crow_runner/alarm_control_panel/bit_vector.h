@@ -90,7 +90,7 @@ public:
     }
 
     const size_t written_bytes_so_far() const {
-        return (write_head_bit + 7) / 8;
+        return write_head_bit / 8;
     }
 
     // bool is_readable() const {
