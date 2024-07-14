@@ -250,46 +250,40 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
     // Check if theres a valid message
     //
     size_t written_bits = arg->receiving_buffer_.written_bits_so_far();
-    if (
-        // the message has the set of bytes complete
-        written_bits % 8 == 0
-        // and
-        && written_bits > (BOUNDARY_SIZE_IN_BITS * 2)
-    ) {
-       arg->find_valid_messages_within_receiving_buffer_();
-    }
-}
 
 
-void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
-    size_t first_byte = 0;
-    size_t last_byte = receiving_buffer_.written_bytes_so_far() ;
-    ESP_LOGD(TAG, "finding valid messages", last_byte);
+    // Don't allow to proceed in case the first byte is not a boundary
+    if (written_bits == 8 && arg->receiving_buffer_.get_byte(0) != BOUNDARY) {
+        ESP_LOGD(TAG, "No valid initial boundary has been found...");
 
-    // check if the beginning and end are actually boundaries
-    if (
-        receiving_buffer_.get_byte(0) != BOUNDARY ||
-        receiving_buffer_.get_byte(last_byte) != BOUNDARY
-    ) {
-        ESP_LOGD(TAG, ,"Begin and end are NOT boundaries...");
-        ESP_LOGD(TAG, ,"Begin Byte: %i", receiving_buffer_.get_byte(0));
-        ESP_LOGD(TAG, ,"End Byte: %i", receiving_buffer_.get_byte(last_byte));
+        // Debugging
+        ESP_LOGD(TAG, "Debugging buffer data: %s", vector_to_hex_string(arg->receiving_buffer_.get_data()).c_str());
+
+        arg->set_state(CrowRunnerBusState::WaitingForData);
         return;
     }
 
-    //
-    // Process message
-    //
-    //
+    size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
+    uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
+    if (written_bits % 8 == 0 && last_byte != BOUNDARY) {
+        ESP_LOGD(TAG, "Last byte is not yet a boundary...");
+    }
 
+    // Potential message found
     // adjust so we can extract the message WITHOUT the boundaries
-    first_byte+=1;
-    last_byte-=1;
+    size_t first_byte=1;
+    last_byte--;
 
+    // Copy the message into a new buffer
     BitVector binary_message = receiving_buffer_.clone(first_byte*8, last_byte*8);
+
+    // set the state back to waiting for data
+    arg->set_state(CrowRunnerBusState::WaitingForData);
 
     // Debugging
     ESP_LOGD(TAG, "New message: %s", vector_to_hex_string(binary_message.get_data()).c_str());
+
+    // TODO: pass it on to the message parser and then to the receiver
 
     // if (receiver_) {
     //     CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
@@ -298,9 +292,6 @@ void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
     //     receiver_(&parsed_message);
     // }
 
-    // clear bit buffer
-    // receiving_buffer_.reset();
-    // we should be able to assess if there's an underlying message
 }
 
 void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {

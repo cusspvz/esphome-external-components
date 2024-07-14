@@ -78,7 +78,6 @@ class CrowRunnerBus {
 
         // receiving vars
         BitVector receiving_buffer_ = BitVector(128 + (BOUNDARY_SIZE_IN_BITS * 2));
-        void find_valid_messages_within_receiving_buffer_();
 
         // data message receiver
         void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
