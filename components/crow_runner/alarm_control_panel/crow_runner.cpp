@@ -270,6 +270,7 @@ void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
     if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
         if (data_bit == 1) return;
         arg->set_state(CrowRunnerBusState::ReceivingMessage);
+        return;
     }
 
     // write bit to buffer
