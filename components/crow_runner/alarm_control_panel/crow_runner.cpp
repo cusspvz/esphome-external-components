@@ -264,6 +264,7 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
 void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
     size_t first_byte = 0;
     size_t last_byte = receiving_buffer_.written_bytes_so_far() ;
+    ESP_LOGD(TAG, "finding valid messages", last_byte);
 
     // check if the beginning and end are actually boundaries
     if (
