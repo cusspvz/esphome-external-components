@@ -218,11 +218,6 @@ void CrowRunnerBus::process_receiving_buffer_() {
 
     // Don't allow to proceed in case the first byte is not a boundary
     if (receiving_buffer_.get_byte(0) != BOUNDARY) {
-        ESP_LOGD(TAG, "No valid initial boundary has been found...");
-
-        // Debugging
-        ESP_LOGD(TAG, "Debugging buffer data: %s", vector_to_hex_string(receiving_buffer_.get_data()).c_str());
-
         set_state(CrowRunnerBusState::WaitingForData);
         return;
     }
@@ -230,8 +225,8 @@ void CrowRunnerBus::process_receiving_buffer_() {
     size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
     uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
     if (last_byte != BOUNDARY) {
-        // ESP_LOGD(TAG, "Last byte is not yet a boundary...");
-        return;
+        ESP_LOGD(TAG, "LAST BYTE %i", last_byte)
+        return; // continue to receive the message
     }
 
     // Potential message found
@@ -246,7 +241,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
     set_state(CrowRunnerBusState::WaitingForData);
 
     // Debugging
-    ESP_LOGD(TAG, "New message: %s", vector_to_hex_string(binary_message.get_data()).c_str());
+    ESP_LOGD(TAG, "NEW MESSAGE: %s", vector_to_hex_string(binary_message.get_data()).c_str());
 
     // TODO: pass it on to the message parser and then to the receiver
 
