@@ -184,8 +184,6 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
         case CrowRunnerBusState::WaitingForData:
             break;
         case CrowRunnerBusState::ReceivingMessage:
-            // clear receiving buffer
-            receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::SendingMessage:
             pin_data_->pin_mode(gpio::FLAG_INPUT);
@@ -201,6 +199,7 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
         case CrowRunnerBusState::Idle:
             break;
         case CrowRunnerBusState::WaitingForData:
+            receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::ReceivingMessage:
             break;
@@ -212,25 +211,28 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
 
 void CrowRunnerBus::process_receiving_buffer_() {
 
-    //
     // Check if theres a valid message
-    //
     size_t written_bytes = receiving_buffer_.written_bytes_so_far();
 
     // Don't allow to proceed in case the first byte is not a boundary
     if (written_bytes == 1) {
         uint8_t first_byte = receiving_buffer_.get_byte(0);
-        ESP_LOGD(TAG, "pos 0 FIRST BYTE: %i", first_byte);
+
+        // ESP_LOGD(TAG, "pos 0 FIRST BYTE: %i", first_byte);
+
         if (first_byte != BOUNDARY) {
             set_state(CrowRunnerBusState::WaitingForData);
         }
+
         return; // continue to receive the message
     } else if (written_bytes < 3) {
         return; // continue to receive the message
     } else {
         // more than 3 bytes
         uint8_t last_byte = receiving_buffer_.get_byte(written_bytes);
-        ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
+
+        // ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
+
         if (last_byte != BOUNDARY) {
             return; // continue to receive the message
         }
@@ -241,13 +243,13 @@ void CrowRunnerBus::process_receiving_buffer_() {
     //
 
     // Copy the message into a new buffer
-    BitVector binary_message = receiving_buffer_.clone(8, (written_bytes - 1)*8);
-
-    // set the state back to waiting for data
-    set_state(CrowRunnerBusState::WaitingForData);
+    BitVector binary_message = receiving_buffer_.clone(8, (written_bytes - 1) * 8);
 
     // Debugging
     ESP_LOGD(TAG, "NEW MESSAGE: %s", vector_to_hex_string(binary_message.get_data()).c_str());
+
+    // set the state back to waiting for data
+    set_state(CrowRunnerBusState::WaitingForData);
 
     // TODO: pass it on to the message parser and then to the receiver
 
