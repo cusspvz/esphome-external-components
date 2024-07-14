@@ -236,13 +236,12 @@ void CrowRunnerBus::process_receiving_buffer_() {
         }
     }
 
-    // Potential message found
-    // adjust so we can extract the message WITHOUT the boundaries
-    size_t first_byte=1;
-    last_byte--;
+    //
+    // Potential message found (within boundaries)
+    //
 
     // Copy the message into a new buffer
-    BitVector binary_message = receiving_buffer_.clone(first_byte*8, last_byte*8);
+    BitVector binary_message = receiving_buffer_.clone((first_byte + 1)*8, (written_bytes - 1)*8);
 
     // set the state back to waiting for data
     set_state(CrowRunnerBusState::WaitingForData);
