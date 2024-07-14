@@ -72,25 +72,25 @@ public:
     void clear() {
         // data.clear();
         std::fill(data.begin(), data.end(), 0);
-        write_head_bit = 0;
-        // read_head_bit = 0;
+        written_bits = 0;
+        // read_bits = 0;
     }
 
     void write_bit(bool value) {
-        set_bit(write_head_bit, value);
-        write_head_bit++;
+        written_bits++;
+        set_bit(written_bits, value);
     }
 
     bool is_writeable() const {
-        return write_head_bit < bit_size;
+        return written_bits < bit_size;
     }
 
     const size_t written_bits_so_far() const {
-        return write_head_bit - 1;
+        return written_bits;
     }
 
     const size_t written_bytes_so_far() const {
-        return (write_head_bit -1) / 8;
+        return written_bits / 8;
     }
 
     // bool is_readable() const {
@@ -107,6 +107,6 @@ private:
     size_t byte_size;
     size_t bit_size;
 
-    size_t write_head_bit;
-    // size_t read_head_bit;
+    size_t written_bits;
+    // size_t read_bits;
 };
