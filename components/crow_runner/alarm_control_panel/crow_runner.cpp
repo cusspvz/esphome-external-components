@@ -182,7 +182,7 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             // noop
             break;
         case CrowRunnerBusState::WaitingForData:
-            pin_data_->detach_interrupt();
+            // pin_data_->detach_interrupt();
             break;
         case CrowRunnerBusState::ReceivingMessage:
             // pin_clock_->detach_interrupt();
@@ -206,7 +206,7 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
             // noop
             break;
         case CrowRunnerBusState::WaitingForData:
-            pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+            // pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
           break;
         case CrowRunnerBusState::ReceivingMessage:
             // pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
@@ -218,18 +218,21 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
     }
 }
 
-void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
-    // Transition from WaitingForData to ReceivingMessage
-    arg->set_state(CrowRunnerBusState::ReceivingMessage);
-}
+// void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
+//     // Transition from WaitingForData to ReceivingMessage
+//     arg->set_state(CrowRunnerBusState::ReceivingMessage);
+// }
 
 void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
-    if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
+    // Read data pin state
+    bool data_bit = arg->pin_data_isr_.digital_read();
+
+    if (data_bit == 0 && arg->receiving_buffer_.written_bits_so_far() == 0) {
+        arg->set_state(CrowRunnerBusState::ReceivingMessage);
+    } else if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
         return;
     }
 
-    // Read data pin state
-    bool data_bit = arg->pin_data_isr_.digital_read();
     arg->receiving_buffer_.write_bit(data_bit);
 
     // Check if we're out of bounderies
