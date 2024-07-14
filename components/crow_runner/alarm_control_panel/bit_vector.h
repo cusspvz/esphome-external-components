@@ -70,7 +70,8 @@ public:
     }
 
     void clear() {
-        data.clear();
+        // data.clear();
+        std::fill(data.begin(), data.end(), 0);
         write_head_bit = 0;
         // read_head_bit = 0;
     }
