@@ -153,8 +153,9 @@ void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data)
     // Start in the WaitingForData state
     set_state(CrowRunnerBusState::WaitingForData);
 
-    // debugging
-    pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+    // Attach clock interrupts
+    pin_clock_->attach_interrupt(CrowRunnerBus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+    pin_clock_->attach_interrupt(CrowRunnerBus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
 }
 
 
@@ -179,20 +180,15 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
     // Logic to dissassemble the previous state
     switch (state_) {
         case CrowRunnerBusState::Idle:
-            // noop
             break;
         case CrowRunnerBusState::WaitingForData:
-            // pin_data_->detach_interrupt();
             break;
         case CrowRunnerBusState::ReceivingMessage:
-            // pin_clock_->detach_interrupt();
-
             // clear receiving buffer
             receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::SendingMessage:
-            // pin_clock_->detach_interrupt();
-            // pin_data_->pin_mode(gpio::FLAG_INPUT);
+            pin_data_->pin_mode(gpio::FLAG_INPUT);
             break;
 
     }
@@ -203,27 +199,67 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
     // Logic to setup the previous state
     switch (state) {
         case CrowRunnerBusState::Idle:
-            // noop
             break;
         case CrowRunnerBusState::WaitingForData:
-            // pin_data_->attach_interrupt(CrowRunnerBus::waiting_for_data_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
-          break;
+            break;
         case CrowRunnerBusState::ReceivingMessage:
-            // pin_clock_->attach_interrupt(CrowRunnerBus::receiving_message_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
-          break;
+            break;
         case CrowRunnerBusState::SendingMessage:
-            // pin_data_->pin_mode(gpio::FLAG_OUTPUT);
-            // pin_clock_->attach_interrupt(CrowRunnerBus::sending_message_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
-          break;
+            pin_data_->pin_mode(gpio::FLAG_OUTPUT);
+            break;
     }
 }
 
-// void CrowRunnerBus::waiting_for_data_interrupt(CrowRunnerBus *arg) {
-//     // Transition from WaitingForData to ReceivingMessage
-//     arg->set_state(CrowRunnerBusState::ReceivingMessage);
-// }
+void CrowRunnerBus::process_receiving_buffer_() {
 
-void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
+    //
+    // Check if theres a valid message
+    //
+    size_t written_bits = receiving_buffer_.written_bits_so_far();
+
+    // Don't allow to proceed in case the first byte is not a boundary
+    if (written_bits == 8 && receiving_buffer_.get_byte(0) != BOUNDARY) {
+        ESP_LOGD(TAG, "No valid initial boundary has been found...");
+
+        // Debugging
+        ESP_LOGD(TAG, "Debugging buffer data: %s", vector_to_hex_string(receiving_buffer_.get_data()).c_str());
+
+        set_state(CrowRunnerBusState::WaitingForData);
+        return;
+    }
+
+    size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
+    uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
+    if (written_bits % 8 == 0 && last_byte != BOUNDARY) {
+        ESP_LOGD(TAG, "Last byte is not yet a boundary...");
+    }
+
+    // Potential message found
+    // adjust so we can extract the message WITHOUT the boundaries
+    size_t first_byte=1;
+    last_byte--;
+
+    // Copy the message into a new buffer
+    BitVector binary_message = receiving_buffer_.clone(first_byte*8, last_byte*8);
+
+    // set the state back to waiting for data
+    set_state(CrowRunnerBusState::WaitingForData);
+
+    // Debugging
+    ESP_LOGD(TAG, "New message: %s", vector_to_hex_string(binary_message.get_data()).c_str());
+
+    // TODO: pass it on to the message parser and then to the receiver
+
+    // if (receiver_) {
+    //     CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
+
+    //     // send it to the message receiver
+    //     receiver_(&parsed_message);
+    // }
+}
+
+// When the clock is falling, we READ data from the data pin
+void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
 
@@ -246,87 +282,45 @@ void CrowRunnerBus::receiving_message_interrupt(CrowRunnerBus *arg) {
         return;
     }
 
-    //
-    // Check if theres a valid message
-    //
-    size_t written_bits = arg->receiving_buffer_.written_bits_so_far();
-
-
-    // Don't allow to proceed in case the first byte is not a boundary
-    if (written_bits == 8 && arg->receiving_buffer_.get_byte(0) != BOUNDARY) {
-        ESP_LOGD(TAG, "No valid initial boundary has been found...");
-
-        // Debugging
-        ESP_LOGD(TAG, "Debugging buffer data: %s", vector_to_hex_string(arg->receiving_buffer_.get_data()).c_str());
-
-        arg->set_state(CrowRunnerBusState::WaitingForData);
-        return;
-    }
-
-    size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
-    uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
-    if (written_bits % 8 == 0 && last_byte != BOUNDARY) {
-        ESP_LOGD(TAG, "Last byte is not yet a boundary...");
-    }
-
-    // Potential message found
-    // adjust so we can extract the message WITHOUT the boundaries
-    size_t first_byte=1;
-    last_byte--;
-
-    // Copy the message into a new buffer
-    BitVector binary_message = receiving_buffer_.clone(first_byte*8, last_byte*8);
-
-    // set the state back to waiting for data
-    arg->set_state(CrowRunnerBusState::WaitingForData);
-
-    // Debugging
-    ESP_LOGD(TAG, "New message: %s", vector_to_hex_string(binary_message.get_data()).c_str());
-
-    // TODO: pass it on to the message parser and then to the receiver
-
-    // if (receiver_) {
-    //     CrowRunnerBusMessage parsed_message = CrowRunnerBusMessage(&binary_message);
-
-    //     // send it to the message receiver
-    //     receiver_(&parsed_message);
-    // }
-
+    arg->process_receiving_buffer_();
 }
 
-void CrowRunnerBus::sending_message_interrupt(CrowRunnerBus *arg) {
-    // ESP_LOGD(TAG, "Sending Message interrupt");
-
-    // Check if there's anything to send
-    if (arg->sending_buffers_queue_.empty()) {
-        // No messages to send, go back to waiting for data
-        arg->set_state(CrowRunnerBusState::WaitingForData);
+// When the clock is rising, we WRITE data from the data pin
+void CrowRunnerBus::clock_rising_interrupt(CrowRunnerBus *arg) {
+    if (arg->state_ != CrowRunnerBusState::SendingMessage) {
         return;
     }
 
-    // Get the current message to send
-    std::vector<bool> &current_message = arg->sending_buffers_queue_.front();
+    // // Check if there's anything to send
+    // if (arg->sending_buffers_queue_.empty()) {
+    //     // No messages to send, go back to waiting for data
+    //     arg->set_state(CrowRunnerBusState::WaitingForData);
+    //     return;
+    // }
 
-    // Send the current bit
-    bool bit_to_send = current_message.front();
-    arg->pin_data_isr_.digital_write(bit_to_send);
+    // // Get the current message to send
+    // std::vector<bool> &current_message = arg->sending_buffers_queue_.front();
 
-    // Remove the sent bit from the current message
-    current_message.erase(current_message.begin());
+    // // Send the current bit
+    // bool bit_to_send = current_message.front();
+    // arg->pin_data_isr_.digital_write(bit_to_send);
+
+    // // Remove the sent bit from the current message
+    // current_message.erase(current_message.begin());
 
 
-    // Check if the whole message has been sent
-     if (current_message.empty()) {
-         // Remove the sent message from the queue
-        arg->sending_buffers_queue_.erase(arg->sending_buffers_queue_.begin());
+    // // Check if the whole message has been sent
+    //  if (current_message.empty()) {
+    //      // Remove the sent message from the queue
+    //     arg->sending_buffers_queue_.erase(arg->sending_buffers_queue_.begin());
 
-        ESP_LOGD(TAG, "Message sent. Remaining messages in queue: %s", String(arg->sending_buffers_queue_.size()));
+    //     ESP_LOGD(TAG, "Message sent. Remaining messages in queue: %s", String(arg->sending_buffers_queue_.size()));
 
-        // If there are no more messages to send, go back to waiting for data
-        if (arg->sending_buffers_queue_.empty()) {
-            arg->set_state(CrowRunnerBusState::WaitingForData);
-        }
-    }
+    //     // If there are no more messages to send, go back to waiting for data
+    //     if (arg->sending_buffers_queue_.empty()) {
+    //         arg->set_state(CrowRunnerBusState::WaitingForData);
+    //     }
+    // }
 }
 
 CrowRunnerBusMessage::CrowRunnerBusMessage(std::bitset<72> *msg) {
