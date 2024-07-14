@@ -215,18 +215,25 @@ void CrowRunnerBus::process_receiving_buffer_() {
     //
     // Check if theres a valid message
     //
+    size_t written_bytes = receiving_buffer_.written_bytes_so_far();
 
     // Don't allow to proceed in case the first byte is not a boundary
-    if (receiving_buffer_.get_byte(0) != BOUNDARY) {
-        set_state(CrowRunnerBusState::WaitingForData);
-        return;
-    }
-
-    size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
-    uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
-    if (last_byte != BOUNDARY) {
-        ESP_LOGD(TAG, "LAST BYTE %i at pos %i", last_byte, last_byte_pos);
-        return; // continue to receive the message
+    if (written_bytes == 1) {
+        uint8_t first_byte = receiving_buffer_.get_byte(0);
+        ESP_LOGD(TAG, "FIRST BYTE %i at pos %i", first_byte, last_byte_pos);
+        if (receiving_buffer_.get_byte(0) != BOUNDARY) {
+            set_state(CrowRunnerBusState::WaitingForData);
+            return;
+        }
+    } else if (written_bytes < 3) {
+        return; // do nothing
+    } else {
+        // more than 3 bytes
+        uint8_t last_byte = receiving_buffer_.get_byte(written_bytes);
+        if (last_byte != BOUNDARY) {
+            ESP_LOGD(TAG, "LAST BYTE %i at pos %i", last_byte, last_byte_pos);
+            return; // continue to receive the message
+        }
     }
 
     // Potential message found
