@@ -228,7 +228,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
         return; // continue to receive the message
     } else {
         // more than 3 bytes
-        uint8_t last_byte = receiving_buffer_.get_byte(written_bytes - 1);
+        uint8_t last_byte = receiving_buffer_.get_byte(written_bytes);
         if (last_byte != BOUNDARY) {
             ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
             return; // continue to receive the message
