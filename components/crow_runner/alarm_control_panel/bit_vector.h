@@ -70,7 +70,7 @@ public:
     }
 
     void clear() {
-        std::fill(data.begin(), data.end(), 0);
+        data.clear();
         write_head_bit = 0;
         // read_head_bit = 0;
     }
@@ -79,12 +79,15 @@ public:
         set_bit(write_head_bit, value);
         write_head_bit++;
     }
+
     bool is_writeable() const {
         return write_head_bit < bit_size;
     }
+
     const size_t written_bits_so_far() const {
         return write_head_bit;
     }
+
     const size_t written_bytes_so_far() const {
         return (write_head_bit + 7) / 8;
     }
