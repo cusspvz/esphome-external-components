@@ -175,7 +175,7 @@ const char* CrowRunnerBusStateToString(CrowRunnerBusState state) {
 }
 
 void CrowRunnerBus::set_state(CrowRunnerBusState state) {
-    ESP_LOGD(TAG, "CrowRunnerBus state changed from %s to %s", CrowRunnerBusStateToString(state_), CrowRunnerBusStateToString(state));
+    // ESP_LOGD(TAG, "CrowRunnerBus state changed from %s to %s", CrowRunnerBusStateToString(state_), CrowRunnerBusStateToString(state));
 
     // Logic to dissassemble the previous state
     switch (state_) {
