@@ -271,7 +271,9 @@ void CrowRunnerBus::find_valid_messages_within_receiving_buffer_() {
         receiving_buffer_.get_byte(0) != BOUNDARY ||
         receiving_buffer_.get_byte(last_byte) != BOUNDARY
     ) {
-        // ESP_LOGD(TAG, "Begin and end are NOT boundaries...");
+        ESP_LOGD(TAG, ,"Begin and end are NOT boundaries...");
+        ESP_LOGD(TAG, ,"Begin Byte: %i", receiving_buffer_.get_byte(0));
+        ESP_LOGD(TAG, ,"End Byte: %i", receiving_buffer_.get_byte(last_byte));
         return;
     }
 
