@@ -86,11 +86,11 @@ public:
     }
 
     const size_t written_bits_so_far() const {
-        return write_head_bit;
+        return write_head_bit - 1;
     }
 
     const size_t written_bytes_so_far() const {
-        return write_head_bit / 8;
+        return (write_head_bit -1) / 8;
     }
 
     // bool is_readable() const {
