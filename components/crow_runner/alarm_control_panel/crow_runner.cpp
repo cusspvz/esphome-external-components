@@ -220,18 +220,17 @@ void CrowRunnerBus::process_receiving_buffer_() {
     // Don't allow to proceed in case the first byte is not a boundary
     if (written_bytes == 1) {
         uint8_t first_byte = receiving_buffer_.get_byte(0);
-        ESP_LOGD(TAG, "pos %i FIRST BYTE: %i", first_byte, 0);
         if (receiving_buffer_.get_byte(0) != BOUNDARY) {
             set_state(CrowRunnerBusState::WaitingForData);
-            return;
         }
+        return; // continue to receive the message
     } else if (written_bytes < 3) {
-        return; // do nothing
+        return; // continue to receive the message
     } else {
         // more than 3 bytes
         uint8_t last_byte = receiving_buffer_.get_byte(written_bytes);
         if (last_byte != BOUNDARY) {
-            ESP_LOGD(TAG, "pos %i LAST BYTE: %i", last_byte, written_bytes);
+            ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
             return; // continue to receive the message
         }
     }
