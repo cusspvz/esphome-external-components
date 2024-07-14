@@ -30,7 +30,7 @@ public:
     uint8_t get_byte(size_t index) const {
         // if (index >= byte_size) throw std::out_of_range("Index out of range");
 
-        return data[index];
+        return data.at(index);
     }
 
     size_t size() const {
