@@ -282,7 +282,7 @@ void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
         return;
     }
 
-    if (receiving_buffer_.written_bits_so_far() % 8 == 0) {
+    if (arg->receiving_buffer_.written_bits_so_far() % 8 == 0) {
         arg->process_receiving_buffer_();
     }
 }
