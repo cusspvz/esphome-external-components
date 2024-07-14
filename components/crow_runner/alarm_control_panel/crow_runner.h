@@ -11,7 +11,6 @@
 namespace esphome {
 namespace crow_runner {
 
-
 // Based on my reverse engineering, I've confirmed the following information:
 // - All the messages have the boundary of 0b10000001 before and after the actual message
 // - The message length can vary
@@ -19,7 +18,6 @@ namespace crow_runner {
 //
 const uint8_t BOUNDARY = 0b01111110;
 const uint8_t BOUNDARY_SIZE_IN_BITS = 8;
-
 
 enum class CrowRunnerBusMessageType {
     Unknown,
