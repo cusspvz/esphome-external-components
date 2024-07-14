@@ -154,7 +154,7 @@ void CrowRunnerBus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data)
     set_state(CrowRunnerBusState::WaitingForData);
 
     // Attach clock interrupts
-    pin_clock_->attach_interrupt(CrowRunnerBus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+    // pin_clock_->attach_interrupt(CrowRunnerBus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
     pin_clock_->attach_interrupt(CrowRunnerBus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
 }
 
@@ -220,8 +220,8 @@ void CrowRunnerBus::process_receiving_buffer_() {
     // Don't allow to proceed in case the first byte is not a boundary
     if (written_bytes == 1) {
         uint8_t first_byte = receiving_buffer_.get_byte(0);
-        // ESP_LOGD(TAG, "pos 0 FIRST BYTE: %i", first_byte);
-        if (receiving_buffer_.get_byte(0) != BOUNDARY) {
+        ESP_LOGD(TAG, "pos 0 FIRST BYTE: %i", first_byte);
+        if (first_byte != BOUNDARY) {
             set_state(CrowRunnerBusState::WaitingForData);
         }
         return; // continue to receive the message
@@ -230,8 +230,8 @@ void CrowRunnerBus::process_receiving_buffer_() {
     } else {
         // more than 3 bytes
         uint8_t last_byte = receiving_buffer_.get_byte(written_bytes);
+        ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
         if (last_byte != BOUNDARY) {
-            // ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
             return; // continue to receive the message
         }
     }
