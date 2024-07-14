@@ -13,7 +13,7 @@ public:
         // if (index >= bit_size) throw std::out_of_range("Index out of range");
         size_t byte_index = index / 8;
         size_t bit_index = index % 8;
-        return (data[byte_index] >> bit_index) & 1;
+        return (data[byte_index] << bit_index) & 128;
     }
 
     void set_bit(size_t index, bool value) {
@@ -21,9 +21,9 @@ public:
         size_t byte_index = index / 8;
         size_t bit_index = index % 8;
         if (value) {
-            data[byte_index] |= (1 << bit_index);
+            data[byte_index] |= (128 >> bit_index);
         } else {
-            data[byte_index] &= ~(1 << bit_index);
+            data[byte_index] &= ~(128 >> bit_index);
         }
     }
 
