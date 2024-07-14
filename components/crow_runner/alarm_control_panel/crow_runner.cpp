@@ -220,6 +220,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
     // Don't allow to proceed in case the first byte is not a boundary
     if (written_bytes == 1) {
         uint8_t first_byte = receiving_buffer_.get_byte(0);
+        ESP_LOGD(TAG, "pos 0 FIRST BYTE: %i", written_bytes);
         if (receiving_buffer_.get_byte(0) != BOUNDARY) {
             set_state(CrowRunnerBusState::WaitingForData);
         }
@@ -269,6 +270,7 @@ void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
         return;
     }
 
+    // write bit to buffer
     arg->receiving_buffer_.write_bit(data_bit);
 
     // Check if we're out of bounderies
