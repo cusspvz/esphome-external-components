@@ -241,7 +241,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
     //
 
     // Copy the message into a new buffer
-    BitVector binary_message = receiving_buffer_.clone((first_byte + 1)*8, (written_bytes - 1)*8);
+    BitVector binary_message = receiving_buffer_.clone(8, (written_bytes - 1)*8);
 
     // set the state back to waiting for data
     set_state(CrowRunnerBusState::WaitingForData);
