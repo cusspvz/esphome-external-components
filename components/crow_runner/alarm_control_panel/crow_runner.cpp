@@ -215,10 +215,9 @@ void CrowRunnerBus::process_receiving_buffer_() {
     //
     // Check if theres a valid message
     //
-    size_t written_bits = receiving_buffer_.written_bits_so_far();
 
     // Don't allow to proceed in case the first byte is not a boundary
-    if (written_bits == 8 && receiving_buffer_.get_byte(0) != BOUNDARY) {
+    if (receiving_buffer_.get_byte(0) != BOUNDARY) {
         ESP_LOGD(TAG, "No valid initial boundary has been found...");
 
         // Debugging
@@ -230,7 +229,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
 
     size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
     uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
-    if (written_bits % 8 == 0 && last_byte != BOUNDARY) {
+    if (last_byte != BOUNDARY) {
         ESP_LOGD(TAG, "Last byte is not yet a boundary...");
         return;
     }
@@ -283,7 +282,9 @@ void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
         return;
     }
 
-    arg->process_receiving_buffer_();
+    if (receiving_buffer_.written_bits_so_far() % 8 == 0) {
+        arg->process_receiving_buffer_();
+    }
 }
 
 // When the clock is rising, we WRITE data from the data pin
