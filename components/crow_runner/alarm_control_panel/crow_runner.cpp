@@ -230,7 +230,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
     size_t last_byte_pos = receiving_buffer_.written_bytes_so_far();
     uint8_t last_byte = receiving_buffer_.get_byte(last_byte_pos);
     if (last_byte != BOUNDARY) {
-        ESP_LOGD(TAG, "Last byte is not yet a boundary...");
+        // ESP_LOGD(TAG, "Last byte is not yet a boundary...");
         return;
     }
 
