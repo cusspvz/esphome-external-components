@@ -264,10 +264,10 @@ void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
 
-    if (data_bit == 0 && arg->receiving_buffer_.written_bits_so_far() == 0) {
+    // Initialization logic
+    if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
+        if (data_bit == 1) return;
         arg->set_state(CrowRunnerBusState::ReceivingMessage);
-    } else if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
-        return;
     }
 
     // write bit to buffer
