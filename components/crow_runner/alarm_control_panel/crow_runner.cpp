@@ -218,8 +218,6 @@ void CrowRunnerBus::process_receiving_buffer_() {
     if (written_bytes == 1) {
         uint8_t first_byte = receiving_buffer_.get_byte(0);
 
-        ESP_LOGD(TAG, "pos 0 FIRST BYTE: %i", first_byte);
-
         if (first_byte != BOUNDARY) {
             set_state(CrowRunnerBusState::WaitingForData);
         }
@@ -230,8 +228,6 @@ void CrowRunnerBus::process_receiving_buffer_() {
     } else {
         // more than 3 bytes
         uint8_t last_byte = receiving_buffer_.get_byte(written_bytes - 1);
-
-        ESP_LOGD(TAG, "pos %i LAST BYTE: %i", written_bytes, last_byte);
 
         if (last_byte != BOUNDARY) {
             return; // continue to receive the message
@@ -246,7 +242,7 @@ void CrowRunnerBus::process_receiving_buffer_() {
     BitVector binary_message = receiving_buffer_.clone(8, (written_bytes - 1) * 8);
 
     // Debugging
-    ESP_LOGD(TAG, "NEW MESSAGE: %s", vector_to_hex_string(binary_message.get_data()).c_str());
+    ESP_LOGD(TAG, "RECEIVED NEW MESSAGE: %s", vector_to_hex_string(binary_message.get_data()).c_str());
 
     // set the state back to waiting for data
     set_state(CrowRunnerBusState::WaitingForData);
