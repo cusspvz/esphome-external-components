@@ -184,6 +184,7 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
         case CrowRunnerBusState::WaitingForData:
             break;
         case CrowRunnerBusState::ReceivingMessage:
+            receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::SendingMessage:
             pin_data_->pin_mode(gpio::FLAG_INPUT);
@@ -199,7 +200,6 @@ void CrowRunnerBus::set_state(CrowRunnerBusState state) {
         case CrowRunnerBusState::Idle:
             break;
         case CrowRunnerBusState::WaitingForData:
-            receiving_buffer_.clear();
             break;
         case CrowRunnerBusState::ReceivingMessage:
             break;
@@ -270,7 +270,6 @@ void CrowRunnerBus::clock_falling_interrupt(CrowRunnerBus *arg) {
     if (arg->state_ != CrowRunnerBusState::ReceivingMessage) {
         if (data_bit == 1) return;
         arg->set_state(CrowRunnerBusState::ReceivingMessage);
-        return;
     }
 
     // write bit to buffer

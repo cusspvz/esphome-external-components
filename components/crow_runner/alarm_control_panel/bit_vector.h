@@ -77,8 +77,8 @@ public:
     }
 
     void write_bit(bool value) {
-        written_bits++;
         set_bit(written_bits, value);
+        written_bits++;
     }
 
     bool is_writeable() const {
