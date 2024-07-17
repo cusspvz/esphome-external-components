@@ -7,6 +7,7 @@
 #include "esphome/core/defines.h"
 #include "esphome/components/alarm_control_panel/alarm_control_panel.h"
 #include "bit_vector.h"
+#include "crow_runner_bus.h"
 
 namespace esphome {
 namespace crow_runner {
@@ -18,66 +19,6 @@ namespace crow_runner {
 //
 const uint8_t BOUNDARY = 0b01111110;
 const uint8_t BOUNDARY_SIZE_IN_BITS = 8;
-
-enum class CrowRunnerBusMessageType {
-    Unknown,
-    StatusChange,
-    ZoneReporting
-};
-
-struct CrowRunnerBusMessageReporting {
-    bool extra_zones;
-    bool zone_activated;
-    bool alarm_triggered;
-    std::bitset<8> active_zones;
-    std::bitset<8> alarm_trigger;
-};
-
-struct CrowRunnerBusMessage {
-    public:
-        CrowRunnerBusMessage(std::bitset<72> *msg);
-
-        CrowRunnerBusMessageType getType() const { return type; }
-        CrowRunnerBusMessageReporting getReporting() const { return reporting; }
-
-    private:
-    CrowRunnerBusMessageType type = CrowRunnerBusMessageType::Unknown;
-        CrowRunnerBusMessageReporting reporting;
-};
-
-enum class CrowRunnerBusState {
-    Idle,
-    WaitingForData,
-    ReceivingMessage,
-    SendingMessage
-};
-
-
-class CrowRunnerBus {
-    public:
-        void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
-        static void IRAM_ATTR clock_falling_interrupt(CrowRunnerBus *arg);
-        static void IRAM_ATTR clock_rising_interrupt(CrowRunnerBus *arg);
-        void send_message(CrowRunnerBusMessage *message);
-        void set_state(CrowRunnerBusState state);
-
-        void attach_receiver(void (*receiver)(CrowRunnerBusMessage* msg)) { this->receiver_ = receiver; }
-        void detach_receiver() { this->receiver_ = nullptr; }
-
-    protected:
-        // data message receiver
-        void (*receiver_)(CrowRunnerBusMessage* msg) = nullptr;
-
-        CrowRunnerBusState state_ = CrowRunnerBusState::Idle;
-        InternalGPIOPin *pin_clock_;
-        InternalGPIOPin *pin_data_;
-        ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
-
-        BitVector receiving_buffer_ = BitVector(128 + (BOUNDARY_SIZE_IN_BITS * 2));
-        std::vector<std::vector<bool>> sending_buffers_queue_;
-
-        void process_receiving_buffer_();
-};
 
 class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPanel, public Component {
     public:
