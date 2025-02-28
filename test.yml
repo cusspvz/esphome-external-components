@@ -15,9 +15,5 @@ alarm_control_panel:
   codes:
     - "1234"
 
-ota:
-  - platform: esphome
-    password: !secret ota_password
-
 logger:
   level: DEBUG

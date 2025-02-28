@@ -1,6 +1,7 @@
 #pragma once
 #include <bitset>
 #include <deque>
+#include <vector>
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
@@ -19,14 +20,23 @@ namespace crow_runner {
 const uint8_t BOUNDARY = 0b01111110;
 const uint8_t BOUNDARY_SIZE_IN_BITS = 8;
 
+enum class AlarmState {
+    Disarmed = 0,
+    ArmedAway = 1,
+    ArmedHome = 2,
+    Triggered = 3,
+    Chime = 4,
+    ArmingAway = 5,
+    ArmingHome = 6
+};
 
-enum class CrowRunnerMessageType {
+enum class MessageType {
     Unknown,
     StatusChange,
     ZoneReporting
 };
 
-struct CrowRunnerMessageReporting {
+struct MessageReporting {
     bool extra_zones;
     bool zone_activated;
     bool alarm_triggered;
@@ -34,51 +44,75 @@ struct CrowRunnerMessageReporting {
     std::bitset<8> alarm_trigger;
 };
 
+struct MessageStatus {
+    AlarmState state;
+    bool is_arming;
+    bool is_armed;
+    bool is_partial;
+    bool is_triggered;
+    bool is_chime;
+};
 
-struct CrowRunnerMessage {
-    public:
-        CrowRunnerBusMessage(std::bitset<72> *msg);
+class Message {
+public:
+    Message(const BitVector& msg);  // Fix constructor name
 
-        CrowRunnerMessageType getType() const { return type; }
-        CrowRunnerMessageReporting getReporting() const { return reporting; }
+    MessageType get_type() const { return type_; }
+    MessageReporting get_reporting() const { return reporting_; }
+    MessageStatus get_status() const { return status_; }
 
-    private:
-        CrowRunnerMessageType type = CrowRunnerMessageType::Unknown;
-        CrowRunnerMessageReporting reporting;
+    // // Add utility methods
+    // static Message create_arm_away_message();
+    // static Message create_arm_home_message();
+    // static Message create_disarm_message(const std::string& code);
+
+private:
+    MessageType type_ = MessageType::Unknown;
+    MessageReporting reporting_;
+    MessageStatus status_;
+
+    void parse_message_(const BitVector& msg);
 };
 
 
-enum class CrowRunnerBusState {
+enum class BusState {
     Idle,
     WaitingForData,
     ReceivingMessage,
     SendingMessage
 };
 
-class CrowRunnerBus {
+class Bus {
     public:
         void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
-        static void IRAM_ATTR clock_falling_interrupt(CrowRunnerBus *arg);
-        static void IRAM_ATTR clock_rising_interrupt(CrowRunnerBus *arg);
-        void send_message(CrowRunnerMessage *message);
-        void set_state(CrowRunnerBusState state);
+        void loop();
+        static void IRAM_ATTR clock_falling_interrupt(Bus *arg);
+        static void IRAM_ATTR clock_rising_interrupt(Bus *arg);
+        void send_message(Message *message);
+        void set_state(BusState state);
 
-        void attach_receiver(void (*receiver)(CrowRunnerMessage* msg)) { this->receiver_ = receiver; }
+        void attach_receiver(void (*receiver)(Message* msg)) { this->receiver_ = receiver; }
         void detach_receiver() { this->receiver_ = nullptr; }
+
+        void send_keypad_button(uint8_t button_code);
+        void send_disarm_code(const std::string& code);
+        bool is_busy() const { return state_ != BusState::Idle; }
+        void set_debug_mode(bool enable) { debug_mode_ = enable; }
 
     protected:
         // data message receiver
-        void (*receiver_)(CrowRunnerMessage* msg) = nullptr;
+        void (*receiver_)(Message* msg) = nullptr;
+        // bool debug_mode_ = false;
+        bool debug_mode_ = true;
 
-        CrowRunnerBusState state_ = CrowRunnerBusState::Idle;
+        BusState state_ = BusState::Idle;
         InternalGPIOPin *pin_clock_;
         InternalGPIOPin *pin_data_;
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         BitVector receiving_buffer_ = BitVector(128 + (BOUNDARY_SIZE_IN_BITS * 2));
-        std::vector<BitVector> sending_buffers_queue_;
-
-        void process_receiving_buffer_();
+        std::deque<BitVector> receiving_queue_;
+        std::deque<BitVector> sending_queue_;
 };
 
 class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPanel, public Component {
@@ -96,10 +130,17 @@ class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPane
         void set_pin_data(InternalGPIOPin *pin) { pin_data_ = pin; }
         void add_code(const std::string &code) { this->codes_.push_back(code); }
 
+        void register_zone_callback(std::function<void(uint8_t zone, bool active)> callback);
+        void set_report_zones(bool report) { report_zones_ = report; }
+
     protected:
         InternalGPIOPin *pin_clock_;
         InternalGPIOPin *pin_data_;
-        CrowRunnerBus bus_;
+        Bus bus_;
+
+        bool report_zones_ = true;
+        std::function<void(uint8_t zone, bool active)> zone_callback_ = nullptr;
+
         void control(const alarm_control_panel::AlarmControlPanelCall &call) override;
         bool is_code_valid_(optional<std::string> code);
         void arm_(optional<std::string> code, alarm_control_panel::AlarmControlPanelState state, uint32_t delay);
