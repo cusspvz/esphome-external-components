@@ -148,10 +148,6 @@ void Bus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data) {
 
     // Start in the WaitingForData state
     set_state(BusState::WaitingForData);
-
-    // Attach clock interrupts
-    // pin_clock_->attach_interrupt(Bus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
-    pin_clock_->attach_interrupt(Bus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
 }
 
 void Bus::loop() {
@@ -176,6 +172,10 @@ void Bus::loop() {
 }
 
 
+float Bus::get_bitrate() const {
+    return bitrate_;
+}
+
 const char* BusStateToString(BusState state) {
     switch (state) {
         case BusState::Idle:
@@ -199,14 +199,16 @@ void Bus::set_state(BusState state) {
     // Logic to dissassemble the previous state
     switch (state_) {
         case BusState::Idle:
+            pin_clock_->detach_interrupt();
             break;
         case BusState::WaitingForData:
+            pin_data_->detach_interrupt();
             break;
         case BusState::ReceivingMessage:
-            receiving_buffer_.clear();
             break;
         case BusState::SendingMessage:
             pin_data_->pin_mode(gpio::FLAG_INPUT);
+            pin_clock_->detach_interrupt();
             break;
     }
 
@@ -216,15 +218,48 @@ void Bus::set_state(BusState state) {
     // Logic to setup the previous state
     switch (state) {
         case BusState::Idle:
+            pin_clock_->detach_interrupt();
             break;
         case BusState::WaitingForData:
+            pin_data_->attach_interrupt(Bus::data_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
             break;
         case BusState::ReceivingMessage:
+            receiving_buffer_.clear();
+            pin_clock_->attach_interrupt(Bus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
             break;
         case BusState::SendingMessage:
             pin_data_->pin_mode(gpio::FLAG_OUTPUT);
+            pin_clock_->detach_interrupt();
+            pin_clock_->attach_interrupt(Bus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
             break;
     }
+}
+
+// Compute bitrate
+void Bus::tick_bitrate() {
+    bitrate_ticks_++;
+
+    uint32_t now = millis();
+
+    // determine if we need to measure and update the bitrate value
+    if (now - bitrate_last_measurement_time_ >= 1000) {
+        bitrate_ = bitrate_ticks_ / ((now - bitrate_last_measurement_time_) / 1000.0f);
+        bitrate_ticks_ = 0;
+        bitrate_last_measurement_time_ = now;
+
+        ESP_LOGD(TAG, "Bitrate %f", bitrate_);
+    }
+}
+
+// Detect whenever we're receiving a message
+void Bus::data_falling_interrupt(Bus *arg) {
+    bool data_bit = false;
+
+    // first 0 got in, changing the state and
+    arg->set_state(BusState::ReceivingMessage);
+
+    // write bit to buffer
+    arg->receiving_buffer_.write_bit(data_bit);
 }
 
 // When the clock is falling, we READ data from the data pin
@@ -232,16 +267,9 @@ void Bus::clock_falling_interrupt(Bus *arg) {
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
 
-    // Initialization logic
-    if (arg->state_ != BusState::ReceivingMessage) {
-        if (data_bit == 1) return;
-        arg->set_state(BusState::ReceivingMessage);
-    }
+    arg->tick_bitrate();
 
-    // write bit to buffer
-    arg->receiving_buffer_.write_bit(data_bit);
-
-    // Check if we're out of bounderies
+    // Check if we're out of bounderies before writing bit to buffer
     if (!arg->receiving_buffer_.is_writeable()) {
         if (arg->debug_mode_) {
             ESP_LOGD(TAG, "No valid message has been found...");
@@ -251,7 +279,12 @@ void Bus::clock_falling_interrupt(Bus *arg) {
         return;
     }
 
+    // write bit to buffer
+    arg->receiving_buffer_.write_bit(data_bit);
+
     if (arg->receiving_buffer_.written_bits_so_far() % 8 == 0) {
+        ESP_LOGD(TAG, "checking");
+
         // Check if theres a valid message
         size_t written_bytes = arg->receiving_buffer_.written_bytes_so_far();
 
@@ -354,7 +387,7 @@ void CrowRunnerAlarmControlPanel::setup() {
 }
 
 void CrowRunnerAlarmControlPanel::loop() {
-    // noop
+    bus_.loop();
 }
 
 void CrowRunnerAlarmControlPanel::dump_config() {
@@ -372,59 +405,55 @@ uint32_t CrowRunnerAlarmControlPanel::get_supported_features() const {
     return ACP_FEAT_ARM_AWAY | ACP_FEAT_TRIGGER;
 }
 
-bool CrowRunnerAlarmControlPanel::is_code_valid_(optional<std::string> code) {
-    if (!codes_.empty()) {
-        if (code.has_value()) {
-            ESP_LOGVV(TAG, "Checking code: %s", code.value().c_str());
-            return (std::count(codes_.begin(), codes_.end(), code.value()) == 1);
-        }
-        ESP_LOGD(TAG, "No code provided");
-        return false;
-    }
-    return true;
-}
+// bool CrowRunnerAlarmControlPanel::is_code_valid_(optional<std::string> code) {
+//     if (!codes_.empty()) {
+//         if (code.has_value()) {
+//             ESP_LOGVV(TAG, "Checking code: %s", code.value().c_str());
+//             return (std::count(codes_.begin(), codes_.end(), code.value()) == 1);
+//         }
+//         ESP_LOGD(TAG, "No code provided");
+//         return false;
+//     }
+//     return true;
+// }
 
 void CrowRunnerAlarmControlPanel::control(const AlarmControlPanelCall &call) {
-    if (call.get_state()) {
-        if (call.get_state() == ACP_STATE_ARMED_AWAY) {
-            arm_(call.get_code(), ACP_STATE_ARMED_AWAY, 0);
-        } else if (call.get_state() == ACP_STATE_DISARMED) {
-            if (!is_code_valid_(call.get_code())) {
-                ESP_LOGW(TAG, "Not disarming code doesn't match");
-                return;
-            }
-            desired_state_ = ACP_STATE_DISARMED;
-            publish_state(ACP_STATE_DISARMED);
-        } else if (call.get_state() == ACP_STATE_TRIGGERED) {
-            publish_state(ACP_STATE_TRIGGERED);
-        } else if (call.get_state() == ACP_STATE_PENDING) {
-            publish_state(ACP_STATE_PENDING);
-        } else {
-            ESP_LOGE(TAG, "State not yet implemented: %s",
-                   LOG_STR_ARG(alarm_control_panel_state_to_string(*call.get_state())));
-        }
-    }
+    // if (call.get_state()) {
+    //     if (call.get_state() == ACP_STATE_ARMED_AWAY) {
+    //         arm_(call.get_code(), ACP_STATE_ARMED_AWAY, 0);
+    //     } else if (call.get_state() == ACP_STATE_DISARMED) {
+    //         if (!is_code_valid_(call.get_code())) {
+    //             ESP_LOGW(TAG, "Not disarming code doesn't match");
+    //             return;
+    //         }
+    //         desired_state_ = ACP_STATE_DISARMED;
+    //         publish_state(ACP_STATE_DISARMED);
+    //     } else if (call.get_state() == ACP_STATE_TRIGGERED) {
+    //         publish_state(ACP_STATE_TRIGGERED);
+    //     } else if (call.get_state() == ACP_STATE_PENDING) {
+    //         publish_state(ACP_STATE_PENDING);
+    //     } else {
+    //         ESP_LOGE(TAG, "State not yet implemented: %s",
+    //                LOG_STR_ARG(alarm_control_panel_state_to_string(*call.get_state())));
+    //     }
+    // }
 }
 
 void CrowRunnerAlarmControlPanel::arm_(optional<std::string> code, AlarmControlPanelState state, uint32_t delay) {
-    if (current_state_ != ACP_STATE_DISARMED) {
-        ESP_LOGW(TAG, "Cannot arm when not disarmed");
-        return;
-    }
-    if (!is_code_valid_(std::move(code))) {
-        ESP_LOGW(TAG, "Not arming code doesn't match");
-        return;
-    }
-    desired_state_ = state;
-    if (delay > 0) {
-        publish_state(ACP_STATE_ARMING);
-    } else {
-        publish_state(state);
-    }
-}
-
-void CrowRunnerAlarmControlPanel::register_zone_callback(std::function<void(uint8_t zone, bool active)> callback) {
-    zone_callback_ = callback;
+    // if (current_state_ != ACP_STATE_DISARMED) {
+    //     ESP_LOGW(TAG, "Cannot arm when not disarmed");
+    //     return;
+    // }
+    // // if (!is_code_valid_(std::move(code))) {
+    // //     ESP_LOGW(TAG, "Not arming code doesn't match");
+    // //     return;
+    // // }
+    // desired_state_ = state;
+    // if (delay > 0) {
+    //     publish_state(ACP_STATE_ARMING);
+    // } else {
+    //     publish_state(state);
+    // }
 }
 
 

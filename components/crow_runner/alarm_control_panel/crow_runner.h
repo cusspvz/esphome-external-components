@@ -86,6 +86,7 @@ class Bus {
     public:
         void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
         void loop();
+        static void IRAM_ATTR data_falling_interrupt(Bus *arg);
         static void IRAM_ATTR clock_falling_interrupt(Bus *arg);
         static void IRAM_ATTR clock_rising_interrupt(Bus *arg);
         void send_message(Message *message);
@@ -98,12 +99,17 @@ class Bus {
         void send_disarm_code(const std::string& code);
         bool is_busy() const { return state_ != BusState::Idle; }
         void set_debug_mode(bool enable) { debug_mode_ = enable; }
+        float get_bitrate() const; // Returns the estimated bitrate
 
     protected:
         // data message receiver
         void (*receiver_)(Message* msg) = nullptr;
         // bool debug_mode_ = false;
         bool debug_mode_ = true;
+        float bitrate_ = 0.0f;
+        uint32_t bitrate_ticks_ = 0;
+        uint32_t bitrate_last_measurement_time_ = 0;
+        void tick_bitrate();
 
         BusState state_ = BusState::Idle;
         InternalGPIOPin *pin_clock_;
@@ -130,19 +136,14 @@ class CrowRunnerAlarmControlPanel : public alarm_control_panel::AlarmControlPane
         void set_pin_data(InternalGPIOPin *pin) { pin_data_ = pin; }
         void add_code(const std::string &code) { this->codes_.push_back(code); }
 
-        void register_zone_callback(std::function<void(uint8_t zone, bool active)> callback);
-        void set_report_zones(bool report) { report_zones_ = report; }
-
     protected:
         InternalGPIOPin *pin_clock_;
         InternalGPIOPin *pin_data_;
         Bus bus_;
 
-        bool report_zones_ = true;
         std::function<void(uint8_t zone, bool active)> zone_callback_ = nullptr;
 
         void control(const alarm_control_panel::AlarmControlPanelCall &call) override;
-        bool is_code_valid_(optional<std::string> code);
         void arm_(optional<std::string> code, alarm_control_panel::AlarmControlPanelState state, uint32_t delay);
 
         std::vector<std::string> codes_;

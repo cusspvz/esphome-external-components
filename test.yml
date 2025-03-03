@@ -10,8 +10,8 @@ packages:
 alarm_control_panel:
   platform: crow_runner
   name: Main Alarm
-  data_pin: GPIO5 # D1
-  clock_pin: GPIO4 # D2
+  data_pin: GPIO4
+  clock_pin: GPIO5
   codes:
     - "1234"
 
