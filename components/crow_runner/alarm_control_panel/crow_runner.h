@@ -86,7 +86,6 @@ class Bus {
     public:
         void setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data);
         void loop();
-        static void IRAM_ATTR data_falling_interrupt(Bus *arg);
         static void IRAM_ATTR clock_falling_interrupt(Bus *arg);
         static void IRAM_ATTR clock_rising_interrupt(Bus *arg);
         void send_message(Message *message);
@@ -98,14 +97,11 @@ class Bus {
         void send_keypad_button(uint8_t button_code);
         void send_disarm_code(const std::string& code);
         bool is_busy() const { return state_ != BusState::Idle; }
-        void set_debug_mode(bool enable) { debug_mode_ = enable; }
         float get_bitrate() const; // Returns the estimated bitrate
 
     protected:
         // data message receiver
         void (*receiver_)(Message* msg) = nullptr;
-        // bool debug_mode_ = false;
-        bool debug_mode_ = true;
         float bitrate_ = 0.0f;
         uint32_t bitrate_ticks_ = 0;
         uint32_t bitrate_last_measurement_time_ = 0;
@@ -117,6 +113,8 @@ class Bus {
         ISRInternalGPIOPin pin_data_isr_; // It is faster to access through ISR
 
         BitVector receiving_buffer_ = BitVector(128 + (BOUNDARY_SIZE_IN_BITS * 2));
+        void debug_receiving_buffer();
+
         std::deque<BitVector> receiving_queue_;
         std::deque<BitVector> sending_queue_;
 };

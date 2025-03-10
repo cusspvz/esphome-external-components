@@ -147,19 +147,25 @@ void Bus::setup(InternalGPIOPin *pin_clock, InternalGPIOPin *pin_data) {
     pin_data_isr_ = pin_data->to_isr();
 
     // Start in the WaitingForData state
+    pin_clock_->attach_interrupt(Bus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+    // pin_clock_->attach_interrupt(Bus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+
     set_state(BusState::WaitingForData);
 }
 
 void Bus::loop() {
+    // Prevent doing stuff when it is not in the WaitingForData state
+    if (state_ != BusState::WaitingForData) {
+        return;
+    }
+
     // check any pending receiving queue
     if (!receiving_queue_.empty()) {
         BitVector msgRaw = receiving_queue_.front();
         receiving_queue_.pop_front();
 
         // Debugging
-        if (debug_mode_) {
-            ESP_LOGD(TAG, "Received New Message: %s", vector_to_hex_string(msgRaw.get_data()).c_str());
-        }
+        ESP_LOGD(TAG, "Received New Message: %s", vector_to_hex_string(msgRaw.get_data()).c_str());
 
         // Create a Message object
         Message message(msgRaw);
@@ -192,23 +198,24 @@ const char* BusStateToString(BusState state) {
 }
 
 void Bus::set_state(BusState state) {
-    if (debug_mode_) {
-        ESP_LOGD(TAG, "Bus state changed from %s to %s", BusStateToString(state_), BusStateToString(state));
-    }
+    // ESP_LOGD(TAG, "Bus state changed from %s to %s", BusStateToString(state_), BusStateToString(state));
 
     // Logic to dissassemble the previous state
     switch (state_) {
         case BusState::Idle:
-            pin_clock_->detach_interrupt();
+            // pin_clock_->detach_interrupt();
             break;
         case BusState::WaitingForData:
-            pin_data_->detach_interrupt();
+            // pin_data_->detach_interrupt();
             break;
         case BusState::ReceivingMessage:
+            // debug_receiving_buffer();
+            receiving_buffer_.clear();
+            // pin_clock_->detach_interrupt();
             break;
         case BusState::SendingMessage:
-            pin_data_->pin_mode(gpio::FLAG_INPUT);
-            pin_clock_->detach_interrupt();
+            // pin_data_->pin_mode(gpio::FLAG_INPUT);
+            // pin_clock_->detach_interrupt();
             break;
     }
 
@@ -218,19 +225,17 @@ void Bus::set_state(BusState state) {
     // Logic to setup the previous state
     switch (state) {
         case BusState::Idle:
-            pin_clock_->detach_interrupt();
+            // pin_clock_->detach_interrupt();
             break;
         case BusState::WaitingForData:
-            pin_data_->attach_interrupt(Bus::data_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
             break;
         case BusState::ReceivingMessage:
-            receiving_buffer_.clear();
-            pin_clock_->attach_interrupt(Bus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+            // pin_clock_->attach_interrupt(Bus::clock_falling_interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
             break;
         case BusState::SendingMessage:
-            pin_data_->pin_mode(gpio::FLAG_OUTPUT);
-            pin_clock_->detach_interrupt();
-            pin_clock_->attach_interrupt(Bus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
+            // pin_data_->pin_mode(gpio::FLAG_OUTPUT);
+            // pin_clock_->detach_interrupt();
+            // pin_clock_->attach_interrupt(Bus::clock_rising_interrupt, this, gpio::INTERRUPT_RISING_EDGE);
             break;
     }
 }
@@ -251,30 +256,24 @@ void Bus::tick_bitrate() {
     }
 }
 
-// Detect whenever we're receiving a message
-void Bus::data_falling_interrupt(Bus *arg) {
-    bool data_bit = false;
-
-    // first 0 got in, changing the state and
-    arg->set_state(BusState::ReceivingMessage);
-
-    // write bit to buffer
-    arg->receiving_buffer_.write_bit(data_bit);
-}
-
 // When the clock is falling, we READ data from the data pin
 void Bus::clock_falling_interrupt(Bus *arg) {
     // Read data pin state
     bool data_bit = arg->pin_data_isr_.digital_read();
 
-    arg->tick_bitrate();
+    if (arg->state_ != BusState::ReceivingMessage) {
+        if (data_bit) {
+            return;
+        }
+
+        arg->set_state(BusState::ReceivingMessage);
+    }
+
+    // arg->tick_bitrate();
 
     // Check if we're out of bounderies before writing bit to buffer
     if (!arg->receiving_buffer_.is_writeable()) {
-        if (arg->debug_mode_) {
-            ESP_LOGD(TAG, "No valid message has been found...");
-            ESP_LOGD(TAG, "Debugging buffer data: %s", vector_to_hex_string(arg->receiving_buffer_.get_data()).c_str());
-        }
+        // ESP_LOGD(TAG, "No valid message has been found...");
         arg->set_state(BusState::WaitingForData);
         return;
     }
@@ -283,7 +282,7 @@ void Bus::clock_falling_interrupt(Bus *arg) {
     arg->receiving_buffer_.write_bit(data_bit);
 
     if (arg->receiving_buffer_.written_bits_so_far() % 8 == 0) {
-        ESP_LOGD(TAG, "checking");
+        // ESP_LOGD(TAG, "checking");
 
         // Check if theres a valid message
         size_t written_bytes = arg->receiving_buffer_.written_bytes_so_far();
@@ -293,6 +292,7 @@ void Bus::clock_falling_interrupt(Bus *arg) {
             uint8_t first_byte = arg->receiving_buffer_.get_byte(0);
 
             if (first_byte != BOUNDARY) {
+                // ESP_LOGD(TAG, "First byte is not equal to boundary: %x. Boundary is %x", first_byte, BOUNDARY);
                 arg->set_state(BusState::WaitingForData);
             }
 
@@ -304,6 +304,7 @@ void Bus::clock_falling_interrupt(Bus *arg) {
             uint8_t last_byte = arg->receiving_buffer_.get_byte(written_bytes - 1);
 
             if (last_byte != BOUNDARY) {
+                // ESP_LOGD(TAG, "Last byte is not equal to boundary: %x. Boundary is %x", last_byte, BOUNDARY);
                 return; // continue to receive the message
             }
         }
@@ -317,6 +318,7 @@ void Bus::clock_falling_interrupt(Bus *arg) {
         arg->receiving_queue_.push_back(binary_message);
 
         // set the state back to waiting for data
+        // ESP_LOGD(TAG, "Potential message found");
         arg->set_state(BusState::WaitingForData);
     }
 }
@@ -359,6 +361,10 @@ void Bus::clock_rising_interrupt(Bus *arg) {
     // }
 }
 
+
+void Bus::debug_receiving_buffer() {
+    ESP_LOGD(TAG, "Received buffer: %s", vector_to_hex_string(receiving_buffer_.get_data()).c_str());
+}
 
 void Bus::send_message(Message *message) {
     // Implement message sending

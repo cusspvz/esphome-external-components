@@ -15,14 +15,18 @@ esp8266:
 wifi:
   ssid: !secret home_wifi_ssid
   password: !secret home_wifi_password
-  manual_ip: !secret manual_wifi_ip
-# web_server:
-#   port: 80
-#   version: 3
+  power_save_mode: HIGH
+  output_power: 10db
+  fast_connect: True
+  manual_ip:
+    static_ip: !secret home_manual_static_ip
+    gateway: !secret home_manual_gateway
+    subnet: 255.255.255.0
 
 ota:
   - platform: esphome
     password: !secret ota_password
+
 # Enable Home Assistant API
 api:
   encryption:
